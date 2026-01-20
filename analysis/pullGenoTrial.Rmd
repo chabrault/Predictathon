@@ -1,0 +1,68 @@
+---
+title: "Pull genotype data from T3"
+author: Charlotte Brault
+output: html_document
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+# Libraries
+
+```{r load libraries}
+suppressPackageStartupMessages(library(here)) # root directory
+suppressPackageStartupMessages(library(data.table)) # load data
+suppressPackageStartupMessages(library(apercu)) # ap
+suppressPackageStartupMessages(library(dplyr)) # formatting
+## devtools::install_github("chabrault/HRSWGS") # custom package instal
+#suppressPackageStartupMessages(library(HRSWGS)) # custom package
+suppressPackageStartupMessages(library(BrAPI)) # T3 connection
+```
+
+
+# Set up root directory
+
+```{r current dir}
+here::i_am("analysis/pullGenoTrial.Rmd")
+```
+
+
+# Create T3 connection
+
+
+```{r}
+wheat <- getBrAPIConnection("T3/Wheat")
+```
+
+```{r}
+resp <- wheat$get("/programs", page="all")
+programs <- sort(sapply(resp$combined_data, \(x) { x$programName }))
+
+selected_breeding_program <- "University of Nebraska"
+resp <- wheat$get("/studies", query=list(programName=selected_breeding_program), page="all")
+trials <- lapply(resp$combined_data, \(x) { list(id=x$studyDbId, name=x$studyName) })
+```
+
+
+```{r}
+selected_trials <- c("","")
+for ( trial_name in selected_trials ) {
+  resp <- wheat$get("/studies", query=list(studyName=trial_name))
+  trial_metadata <- resp$data[[1]]
+  trial_id <- trial_metadata$studyDbId
+  location <- trial_metadata$locationName
+  planting_date <- trial_metadata$startDate
+  harvest_date <- trial_metadata$endDate
+  design <- trial_metadata$experimentalDesign$PUI
+}
+```
+
+
+```{r}
+geno <- wheat$wizard("genotyping_protocols", list(accessions = "LINKERT"))
+
+#geno <- wheat$wizard("genotyping_protocols", list(accessions = accessions$data$ids))
+```
+
