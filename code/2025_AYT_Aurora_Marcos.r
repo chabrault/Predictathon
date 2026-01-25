@@ -109,3 +109,40 @@ out_vcf
 file.exists(out_vcf)
 file.info(out_vcf)
 
+
+library(vcfR)
+library(rrBLUP)
+
+#Read the QC VCF and extract genotype matrix
+
+vcf_path <- "/Users/marcos/Documents/GitHub/Predictathon/data/genotypic/2025_AYT_Aurora_GBS_SDSU_2025_AuroraOnly.QC.vcf.gz"
+
+vcf <- read.vcfR(vcf_path, verbose = FALSE)
+
+# Extract genotype calls
+gt <- extract.gt(vcf, element = "GT")   # matrix markers x samples, values like "0/0", "0/1", "1/1", "./."
+
+# Convert to numeric dosage: 0,1,2
+dosage <- matrix(NA_real_, nrow = nrow(gt), ncol = ncol(gt),
+                 dimnames = dimnames(gt))
+
+dosage[gt %in% c("0/0","0|0")] <- 0
+dosage[gt %in% c("0/1","1/0","0|1","1|0")] <- 1
+dosage[gt %in% c("1/1","1|1")] <- 2
+
+# transpose to individuals x markers (rrBLUP convention often uses individuals in rows)
+M <- t(dosage)
+
+dim(M)        # should be 125 x 11738
+M[1:5,1:5]
+
+#Simple imputation and build a genomic relationship matrix
+# Mean-impute missing genotypes (fast baseline)
+for (j in 1:ncol(M)) {
+  mj <- M[, j]
+  M[is.na(mj), j] <- mean(mj, na.rm = TRUE)
+}
+
+G <- A.mat(M)   # VanRaden G matrix
+dim(G)
+
