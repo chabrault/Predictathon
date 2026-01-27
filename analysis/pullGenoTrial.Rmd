@@ -21,6 +21,9 @@ suppressPackageStartupMessages(library(purrr)) # handle lists
 #suppressPackageStartupMessages(library(HRSWGS)) # custom package
 ## devtools::install_github("TriticeaeToolbox/BrAPI.R")
 suppressPackageStartupMessages(library(BrAPI)) # T3 connection
+suppressPackageStartupMessages(library(DT)) # print table
+suppressPackageStartupMessages(library(ggplot2)) # plot
+suppressPackageStartupMessages(library(vcfR)) # load vcf
 ```
 
 
@@ -28,6 +31,7 @@ suppressPackageStartupMessages(library(BrAPI)) # T3 connection
 
 ```{r current dir}
 here::i_am("analysis/pullGenoTrial.Rmd")
+source(here("code","useful_functions.R"))
 ```
 
 
@@ -72,16 +76,43 @@ We can also extract genotype names instead of numbers (replace `data$ids` by `da
 ```{r}
 # Get genotyping protocols that have data for any of the trial's accessions
 geno_protocols <- map(geno_number, \(x)
-  wheat$wizard("genotyping_protocols", list(accessions = x), verbose=F)$data$ids)
+                      wheat$wizard("genotyping_protocols", list(accessions = x), verbose=F)$data$ids)
 names(geno_protocols) <- trials_predictathon
 ap(geno_protocols)
+## map the protocol name and id
+protocol_ids <- unique(unlist(geno_protocols))
+protocol_names <- unique(unlist(map(geno_number, \(x)
+                                    wheat$wizard("genotyping_protocols", list(accessions = x), verbose=F)$data$names)))
+
+df_protocols <- tibble(
+  protocol_id = protocol_ids,
+  protocol_name = protocol_names
+)
+
+## match for each genotype in each trial the genotyping protocol
 geno_matches <- map(geno_number, \(x) db$filter_geno_protocols(x)$data$matches)
 names(geno_matches) <- trials_predictathon
 geno_matches_df <- bind_rows(geno_matches, .id="trial")
 DT::datatable(geno_matches_df)
 # geno_pro <- map(geno_number, \(x)
 #   wheat$wizard("genotyping_projects", list(accessions = x), verbose=F)$data)
+
 ```
+Visualize the matches
+```{r}
+protocols <- colnames(geno_matches_df)[-c(1,2)]
+geno_matches_df_long <- tidyr::pivot_longer(geno_matches_df,
+                                            cols = all_of(protocols),
+                                            names_to = "protocol_id",
+                                            values_to = "matches")
+ggplot(geno_matches_df_long,
+       aes(x=accession, y=protocol_id, fill=matches)) +
+  facet_wrap(~trial, scales="free_x")+
+  geom_tile()+
+  theme(axis.text=element_blank())
+```
+
+
 For the first trial (AWY1_DVPWA_2024), there is only one genotyping protocol (291 = ThermoFisher AgriSeq 5K), let's download a VCF for this one.
 
 ## Download vcf for one trial
@@ -90,7 +121,7 @@ For the first trial (AWY1_DVPWA_2024), there is only one genotyping protocol (29
 tri <- "AWY1_DVPWA_2024"
 (prot <- geno_protocols[[tri]][1])
 (geno_ids <- geno_number[[tri]])
-
+geno_names <- wheat$wizard("accessions", list(trials = tri), verbose=F)$data$names
 proj <-  wheat$wizard("genotyping_projects", list(accessions = geno_ids), verbose=F)$data$ids
 
 ## check available files for this protocol
@@ -110,6 +141,80 @@ wheat$vcf_archived(
 
 There are two files for the same genotyping project and protocol => check if we need to combine them or if they are the same.
 
+## Load downloaded vcf
+
+```{r}
+vcf <- list()
+vcf.read <- vcfR::read.vcfR(file=p2f, verbose=FALSE)  
+vcf$gt <- vcfR::extract.gt(vcf.read, element = "GT",
+                           as.numeric=F, IDtoRowNames = T)
+vcf$mrk.info <- tibble::as_tibble(vcfR::getFIX(vcf.read))
+vcf$mrk.info <- vcf$mrk.info |>
+  mutate(POS=as.numeric(POS)) |> arrange(CHROM, POS)
+ap(vcf)
+dim(vcf$gt)
+gt <- vcf$gt
+setdiff(geno_names, colnames(gt)) # 4 accessions missing
+
+# other lines genotyped with this protocol not tested in this trial
+length(setdiff(colnames(gt), geno_names)) 
+```
+
+# Select genotyping protocol for each trial
+
+Question: what to do with lines without any genotyping information?
+
+## Number of lines genotyped per trial and protocol
+
+```{r}
+geno_matches_df[,protocols] <- apply(geno_matches_df[,protocols], 2, \(x){
+  x[is.na(x)] <- FALSE
+  return(x)
+})
+
+df <- tidyr::pivot_longer(geno_matches_df, cols=all_of(protocols)) |> 
+  group_by(trial,name) |> 
+  summarise(nb_lines_geno=sum(value)) |> 
+  filter(nb_lines_geno >0) |> 
+  arrange(desc(nb_lines_geno))
+
+print_table(df)
+```
+
+## Add info
+
+Add ratio of lines genotyped in each trial and protocol id
+
+```{r}
+df <- df |> 
+  rowwise() |> 
+  mutate(nb_lines_trial = length(geno_number[[trial]]),
+         ratio_geno = round(100*nb_lines_geno/nb_lines_trial,1)) |> 
+  left_join(df_protocols, by=c("name"="protocol_name")) 
+print_table(df)
+
+```
+
+
+# Seek associated trial metadata
+
+For a given genotyping protocol, which lines have been genotyped?
+```{r}
+## start with one genotyping protocol
+prot_id <- 299 ## wheat 3K for OHRWW_2025_SPO
+trials <- wheat$wizard("trials", list(genotyping_protocols = prot_id))$data$names
+length(trials)
+## restrict to the most recent years and to the target breeding program
+trials <- wheat$wizard("trials", list(genotyping_protocols = prot_id,years=c(2022:2025), 
+                                      breeding_programs=c("University of Wisconsin")))$data$names
+```
+
+
+# Download vcf for all the selected trials
+
+```{r}
+## TODO
+```
 
 
 
