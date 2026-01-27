@@ -1,0 +1,129 @@
+---
+title: "LeBar_Predictathon"
+author: "Luke LeBar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# WheatCAP Predictathon: Phenotypic Data
+
+## Accessing T3 Breedbase
+
+```{r}
+library(BrAPI)
+library(purrr)
+library(tidyverse)
+
+wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
+
+wheat$login("LukeLeBar", "Imagine2003")
+
+wheat$get("/germplasm")
+```
+
+## Accessing Trial Metadata
+
+```{r}
+focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC", "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3","2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+
+check_val <- function(x) {
+  if (is.null(x) || length(x) == 0) return(NA)
+  return(x)
+}
+results_list <- list()
+for(trial_name in focal_trials){
+  resp <- wheat$get("/studies", query=list(studyName=trial_name))
+  if (length(resp$data) == 0) {
+    message(paste("Skipping: No data found for", trial_name))
+    next
+  }
+  trial_metadata <- resp$data[[1]]
+  row_data <- data.frame(
+    trial_name    = trial_name,
+    program       = check_val(trial_metadata$trialName),
+    trial_id      = check_val(trial_metadata$studyDbId),
+    location      = check_val(trial_metadata$locationName),
+    planting_date = check_val(trial_metadata$startDate),
+    harvest_date  = check_val(trial_metadata$endDate),
+    design        = check_val(trial_metadata$experimentalDesign$PUI),
+    stringsAsFactors = FALSE
+  )
+  results_list[[trial_name]] <- row_data
+}
+focal_metadata <- do.call(rbind, results_list)
+```
+
+## CV00: Gather Program Phenotypic Data
+
+### Grabbing all Trials for our Programs of Interest
+
+```{r}
+programs <- focal_metadata$program
+all_trials <- list()
+for (prog in programs) {
+  resp <- wheat$get("/studies", query = list(programName = prog))
+  if (length(resp$data) == 0) next
+  prog_trials <- lapply(resp$data, function(x) {
+    list(id = x$studyDbId, name = x$studyName, program = prog)
+  })
+  all_trials <- c(all_trials, prog_trials)
+}
+all_trials <- do.call(rbind, all_trials)
+all_trials <- as.data.frame(all_trials)
+
+all_trials <- all_trials %>% filter(name %notin% focal_metadata$trial_name)
+```
+
+### Yield Data for All Trials
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# 1. Setup
+yield_trait <- "Grain yield - kg/ha"
+master_yield_list <- list()
+
+message(paste("Starting GET requests for", length(all_trials), "trials..."))
+
+# 2. Loop using the list we built earlier
+for (i in seq_along(all_trials)) {
+  trial <- all_trials[[i]]
+  
+  # Print progress so you aren't in the dark
+  if (i %% 5 == 0) message(paste("Processing trial", i, "of", length(all_trials)))
+  
+  # Use GET with a server-side filter for the trait
+  resp <- tryCatch({
+    wheatConn$get("/observations", query = list(
+      studyDbId = trial$id,
+      observationVariableName = yield_trait,
+      pageSize = 1000
+    ))
+  }, error = function(e) return(NULL))
+
+  # 3. Process if data exists
+  # Note: BrAPI GET usually returns data in 'data' or 'combined_data' 
+  # based on the specific R client version. Let's check both.
+  obs <- if(!is.null(resp$combined_data)) resp$combined_data else resp$data
+  
+  if (length(obs) > 0) {
+    # Extract using fast vectorized approach
+    master_yield_list[[i]] <- tibble(
+      program        = trial$program,
+      study_name     = trial$name,
+      studyDbId      = trial$id,
+      accession_name = sapply(obs, function(x) x$germplasmName),
+      yield_value    = as.numeric(sapply(obs, function(x) x$value))
+    )
+  }
+}
+
+# 4. Final Bind
+if (length(master_yield_list) > 0) {
+  final_df <- bind_rows(master_yield_list)
+  message(paste("Success! Gathered", nrow(final_df), "rows of yield data."))
+} else {
+  message("No yield data found. Check if the trait name is exactly correct.")
+}
+```
