@@ -10,6 +10,7 @@ output: html_document
 ## Accessing T3 Breedbase
 
 ```{r}
+rm(list=ls())
 library(BrAPI)
 library(purrr)
 library(tidyverse)
@@ -77,53 +78,11 @@ all_trials <- all_trials %>% filter(name %notin% focal_metadata$trial_name)
 ### Yield Data for All Trials
 
 ```{r}
-library(dplyr)
-library(purrr)
+wheat <- getBrAPIConnection("T3/Wheat")
+results <- wheat$search("/observations", body=list(studyDbIds = c(trial_ids)))
 
-# 1. Setup
-yield_trait <- "Grain yield - kg/ha"
-master_yield_list <- list()
 
-message(paste("Starting GET requests for", length(all_trials), "trials..."))
+wheat <- getBrAPIConnection("T3/WheatCAP")
+accessions <- wheat$wizard("accessions", list(trials=c("22HUTKS_TCAP_C", "22MANKS_TDicQual")), verbose=T)
 
-# 2. Loop using the list we built earlier
-for (i in seq_along(all_trials)) {
-  trial <- all_trials[[i]]
-  
-  # Print progress so you aren't in the dark
-  if (i %% 5 == 0) message(paste("Processing trial", i, "of", length(all_trials)))
-  
-  # Use GET with a server-side filter for the trait
-  resp <- tryCatch({
-    wheatConn$get("/observations", query = list(
-      studyDbId = trial$id,
-      observationVariableName = yield_trait,
-      pageSize = 1000
-    ))
-  }, error = function(e) return(NULL))
-
-  # 3. Process if data exists
-  # Note: BrAPI GET usually returns data in 'data' or 'combined_data' 
-  # based on the specific R client version. Let's check both.
-  obs <- if(!is.null(resp$combined_data)) resp$combined_data else resp$data
-  
-  if (length(obs) > 0) {
-    # Extract using fast vectorized approach
-    master_yield_list[[i]] <- tibble(
-      program        = trial$program,
-      study_name     = trial$name,
-      studyDbId      = trial$id,
-      accession_name = sapply(obs, function(x) x$germplasmName),
-      yield_value    = as.numeric(sapply(obs, function(x) x$value))
-    )
-  }
-}
-
-# 4. Final Bind
-if (length(master_yield_list) > 0) {
-  final_df <- bind_rows(master_yield_list)
-  message(paste("Success! Gathered", nrow(final_df), "rows of yield data."))
-} else {
-  message("No yield data found. Check if the trait name is exactly correct.")
-}
 ```
