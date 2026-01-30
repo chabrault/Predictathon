@@ -25,7 +25,9 @@ wheat$get("/germplasm")
 ## Accessing Trial Metadata
 
 ```{r}
-focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC", "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3","2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC",
+                  "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3","2025_AYT_Aurora",
+                  "YT_Urb_25","STP1_2025_MCG")
 
 check_val <- function(x) {
   if (is.null(x) || length(x) == 0) return(NA)
@@ -72,28 +74,41 @@ for (prog in programs) {
 all_trials <- do.call(rbind, all_trials)
 all_trials <- as.data.frame(all_trials)
 
-all_trials <- all_trials %>% filter(name %notin% focal_metadata$trial_name)
+all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
 ```
 
 ### Yield Data for All Trials
 
+Problems encountered:
+
+- Trial ID 10703 has an long runtime
+- Trial ID 10710 times out
+- Trial ID 9471 doesn't have yield data
+
 ```{r}
 wheat <- getBrAPIConnection("T3/Wheat")
 vars_rm <- "season"
-
+trial_ids <- as.character(all_trials$id)
+length(trial_ids)
 all_observations <- data.frame()
-  
-for(trial_id in trial_ids){
-results <- wheat$search("/observations", body=list(studyDbIds = c(trial_id)))
-results <- results$combined_data
-results <- results %>%
-  map(function(item){
-  item[vars_rm] <- NULL
-  return(item)
-  }) %>% 
-  bind_rows
-results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
-all_observations <- rbind(all_observations, results)
+## this trial id is long: 10703
+## this trial id times out: 10710
+trial_ids <- trial_ids[!trial_ids %in% c("10703","10710")]
+
+for(i in seq_along(trial_ids)){
+  write(paste0("Processing trial ", i, " of ", length(trial_ids)), stdout())
+  results <- wheat$search("/observations", body=list(studyDbIds = c(trial_ids[i])))
+  results <- results$combined_data
+  results <- results %>%
+    map(function(item){
+      item[vars_rm] <- NULL
+      return(item)
+    }) %>% 
+    bind_rows
+  if(nrow(results) >0){
+    results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+    all_observations <- rbind(all_observations, results)
+  }
 }
 ```
 
