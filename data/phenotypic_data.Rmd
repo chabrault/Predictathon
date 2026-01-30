@@ -87,14 +87,16 @@ trial_ids <- all_trials$id
 
 results <- wheat$search("/observations", body=list(studyDbIds = c(trial_ids)))
 results <- results$combined_data
-results <- results %>%
+all_pheno <- results %>%
   map(function(item){
   item[vars_rm] <- NULL
   return(item)
   }) %>% 
   bind_rows
+all_pheno <- as.data.frame(all_pheno)
+all_pheno <- all_pheno %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
 
-results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+write.csv(all_pheno, "all_pheno.csv")
 ```
 
 ## CV0: Pull Phenotype Data for Focal Accessions
