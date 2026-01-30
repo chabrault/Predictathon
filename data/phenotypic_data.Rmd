@@ -82,9 +82,10 @@ wheat <- getBrAPIConnection("T3/Wheat")
 vars_rm <- "season"
 
 all_observations <- data.frame()
-  
-for(trial_id in trial_ids){
-results <- wheat$search("/observations", body=list(studyDbIds = c(trial_id)))
+
+trial_ids <- all_trials$id
+
+results <- wheat$search("/observations", body=list(studyDbIds = c(trial_ids)))
 results <- results$combined_data
 results <- results %>%
   map(function(item){
@@ -92,9 +93,8 @@ results <- results %>%
   return(item)
   }) %>% 
   bind_rows
+
 results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
-all_observations <- rbind(all_observations, results)
-}
 ```
 
 ## CV0: Pull Phenotype Data for Focal Accessions
@@ -108,4 +108,15 @@ colnames(focal_acc)[2] = "acc_name"
 focal_ids <- focal_acc$acc_id
 wheat <- getBrAPIConnection("T3/Wheat")
 focal_pheno <- wheat$search("/observations", body=list(germplasmDbId=c(focal_ids)))
+
+results <- focal_pheno$combined_data
+results <- results %>%
+  map(function(item){
+  item[vars_rm] <- NULL
+  return(item)
+  }) %>% 
+  bind_rows
+results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+
+write.csv(results, "focal_yield.csv")
 ```
