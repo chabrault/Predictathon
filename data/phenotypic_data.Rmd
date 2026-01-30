@@ -5,15 +5,31 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+# Libraries
+
+```{r}
+suppressPackageStartupMessages(library(BrAPI)) # T3 connection)
+suppressPackageStartupMessages(library(purrr)) # handle lists
+suppressPackageStartupMessages(library(tidyverse)) # data handling
+suppressPackageStartupMessages(library(here)) # root directory
+```
+
+
+# Set up root directory
+
+TODO: need to move this script to analysis folder
+```{r current dir}
+here::i_am("data/phenotypic_data.Rmd")
+source(here("code","useful_functions.R"))
+```
+
+
 # WheatCAP Predictathon: Phenotypic Data
 
 ## Accessing T3 Breedbase
 
 ```{r}
 rm(list=ls())
-library(BrAPI)
-library(purrr)
-library(tidyverse)
 
 wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
 
@@ -107,10 +123,21 @@ for(i in seq_along(trial_ids)){
     bind_rows
   if(nrow(results) >0){
     results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
-    all_observations <- rbind(all_observations, results)
+    all_observations <- bind_rows(all_observations, results)
   }
 }
+
+## export all trials yield
+p2f <- here("data","phenotypic","allTrials_yield_raw.csv") # path to file
+write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
 ```
+
+
+Modifications compared to Luke's version:
+
+- Print the iteration number to track progress and see if some trials are causing problems
+- Test if trial data has yield variable
+- Replace `rbind` with `bind_rows` for handling when columns names differ
 
 ## CV0: Pull Phenotype Data for Focal Accessions
 
@@ -133,5 +160,7 @@ results <- results %>%
   bind_rows
 results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
 
-write.csv(results, "focal_yield.csv")
+## export focal accessions yield
+p2f <- here("data","phenotypic","focal_yield_raw.csv") # path to file
+write.csv(results, p2f)
 ```
