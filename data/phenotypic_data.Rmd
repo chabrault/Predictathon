@@ -32,6 +32,9 @@ source(here("code","useful_functions.R"))
 
 ```{r}
 rm(list=ls())
+library(BrAPI)
+library(purrr)
+library(tidyverse)
 
 wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
 
@@ -43,9 +46,7 @@ wheat$get("/germplasm")
 ## Accessing Trial Metadata
 
 ```{r}
-focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC",
-                  "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3","2025_AYT_Aurora",
-                  "YT_Urb_25","STP1_2025_MCG")
+focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC", "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3","2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
 
 check_val <- function(x) {
   if (is.null(x) || length(x) == 0) return(NA)
@@ -119,19 +120,12 @@ write.table(all_trials, p2f, sep=",", row.names=F, quote=F)
 
 ### Yield Data for All Trials
 
-Problems encountered:
-
-- Trial ID 10703 has an long runtime
-- Trial ID 10710 times out
-- Trial ID 9471 doesn't have yield data
-
 ```{r}
 all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
 
 wheat <- getBrAPIConnection("T3/Wheat")
 vars_rm <- "season"
-trial_ids <- as.character(all_trials$id)
-length(trial_ids)
+
 all_observations <- data.frame()
 
 pb <- txtProgressBar(min=1, max=length(trial_ids), style = 3)
@@ -190,7 +184,5 @@ results <- results %>%
   bind_rows
 results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
 
-## export focal accessions yield
-p2f <- here("data","phenotypic","focal_yield_raw.csv") # path to file
-write.csv(results, p2f)
+write.csv(results, "focal_yield.csv")
 ```
