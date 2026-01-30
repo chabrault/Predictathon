@@ -12,6 +12,8 @@ suppressPackageStartupMessages(library(BrAPI)) # T3 connection)
 suppressPackageStartupMessages(library(purrr)) # handle lists
 suppressPackageStartupMessages(library(tidyverse)) # data handling
 suppressPackageStartupMessages(library(here)) # root directory
+suppressPackageStartupMessages(library(apercu)) # look at lists
+suppressPackageStartupMessages(library(progress)) # progress bar
 ```
 
 
@@ -62,6 +64,7 @@ for(trial_name in focal_trials){
     program       = check_val(trial_metadata$trialName),
     trial_id      = check_val(trial_metadata$studyDbId),
     location      = check_val(trial_metadata$locationName),
+    year         = check_val(unlist(trial_metadata$seasons)),
     planting_date = check_val(trial_metadata$startDate),
     harvest_date  = check_val(trial_metadata$endDate),
     design        = check_val(trial_metadata$experimentalDesign$PUI),
@@ -78,19 +81,40 @@ focal_metadata <- do.call(rbind, results_list)
 
 ```{r}
 programs <- focal_metadata$program
-all_trials <- list()
+all_trials_list <- list()
 for (prog in programs) {
-  resp <- wheat$get("/studies", query = list(programName = prog))
+  resp <- wheat$get("/studies", query = list(programName=prog, pageSize=1000))
   if (length(resp$data) == 0) next
+  ## create a data frame summarizing trial id, name, location, year, program
   prog_trials <- lapply(resp$data, function(x) {
-    list(id = x$studyDbId, name = x$studyName, program = prog)
+    data.frame(id = x$studyDbId, 
+               name = x$studyName, 
+               location = x$locationName,
+               year=paste(unlist(x$seasons), collapse=", "), 
+               program = prog)
   })
-  all_trials <- c(all_trials, prog_trials)
+  prog_trials <- do.call(rbind, prog_trials)
+  ## if there are too many trials, select those from the same year and location as focal trial
+  if(nrow(prog_trials) > 20){
+    focal_years <- focal_metadata %>% filter(program == prog) |> pull(year)
+    focal_locations <- focal_metadata %>% filter(program == prog) %>% pull(location) %>% unique()
+    prog_trials <- prog_trials %>% 
+      filter(year %in% focal_years | location %in% focal_locations)
+  }
+  
+  all_trials_list[[prog]] <- prog_trials
 }
-all_trials <- do.call(rbind, all_trials)
-all_trials <- as.data.frame(all_trials)
+## look first five elements
+ap(all_trials_list)
+lapply(all_trials_list, nrow)
+all_trials <- bind_rows(all_trials_list, .id="focal_trial")
+all_trials$isFocal <- ifelse(all_trials$name %in% focal_trials, TRUE, FALSE)
+table(all_trials$isFocal)
+all(focal_trials %in% all_trials$name)
 
-all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
+## export trial names to pull genotypic data from it
+p2f <- here("data","allTrials_metadata.csv") # path to file
+write.table(all_trials, p2f, sep=",", row.names=F, quote=F)
 ```
 
 ### Yield Data for All Trials
@@ -102,17 +126,22 @@ Problems encountered:
 - Trial ID 9471 doesn't have yield data
 
 ```{r}
+all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
+
 wheat <- getBrAPIConnection("T3/Wheat")
 vars_rm <- "season"
 trial_ids <- as.character(all_trials$id)
 length(trial_ids)
 all_observations <- data.frame()
+
+pb <- txtProgressBar(min=1, max=length(trial_ids), style = 3)
 ## this trial id is long: 10703
 ## this trial id times out: 10710
 trial_ids <- trial_ids[!trial_ids %in% c("10703","10710")]
 
 for(i in seq_along(trial_ids)){
-  write(paste0("Processing trial ", i, " of ", length(trial_ids)), stdout())
+  setTxtProgressBar(pb, i)
+  #write(paste0("Processing trial ", i, " of ", length(trial_ids)), stdout())
   results <- wheat$search("/observations", body=list(studyDbIds = c(trial_ids[i])))
   results <- results$combined_data
   results <- results %>%
@@ -126,6 +155,7 @@ for(i in seq_along(trial_ids)){
     all_observations <- bind_rows(all_observations, results)
   }
 }
+close(pb)
 
 ## export all trials yield
 p2f <- here("data","phenotypic","allTrials_yield_raw.csv") # path to file
