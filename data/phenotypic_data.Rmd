@@ -167,7 +167,7 @@ Modifications compared to Luke's version:
 
 ```{r}
 wheat <- getBrAPIConnection("T3/WheatCAP")
-focal_acc <- wheat$wizard("accessions", list(trials=c(focal_trials)), verbose=T)
+focal_acc <- wheat$wizard("accessions", list(trials=c(focal_trials), pageSize=1000), verbose=T)
 focal_acc <- as.data.frame(cbind(focal_acc$data$ids, focal_acc$data$names))
 colnames(focal_acc)[1] = "acc_id"
 colnames(focal_acc)[2] = "acc_name"
