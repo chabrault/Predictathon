@@ -16,15 +16,14 @@ suppressPackageStartupMessages(library(apercu)) # look at lists
 suppressPackageStartupMessages(library(progress)) # progress bar
 ```
 
-
 # Set up root directory
 
 TODO: need to move this script to analysis folder
+
 ```{r current dir}
 here::i_am("data/phenotypic_data.Rmd")
 source(here("code","useful_functions.R"))
 ```
-
 
 # WheatCAP Predictathon: Phenotypic Data
 
@@ -158,12 +157,11 @@ p2f <- here("data","phenotypic","allTrials_yield_raw.csv") # path to file
 write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
 ```
 
-
 Modifications compared to Luke's version:
 
-- Print the iteration number to track progress and see if some trials are causing problems
-- Test if trial data has yield variable
-- Replace `rbind` with `bind_rows` for handling when columns names differ
+-   Print the iteration number to track progress and see if some trials are causing problems
+-   Test if trial data has yield variable
+-   Replace `rbind` with `bind_rows` for handling when columns names differ
 
 ## CV0: Pull Phenotype Data for Focal Accessions
 
