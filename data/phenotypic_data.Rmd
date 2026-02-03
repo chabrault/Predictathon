@@ -173,47 +173,31 @@ colnames(focal_acc)[1] = "acc_id"
 colnames(focal_acc)[2] = "acc_name"
 focal_ids <- focal_acc$acc_id
 wheat <- getBrAPIConnection("T3/Wheat")
-target_trait <- "Grain yield - kg/ha|CO_321:0001218" 
+vars_rm <- "season"
+all_observations <- data.frame()
 
-get_yield <- function(focal_ids) {
-  payload <- list(
-    germplasmDbIds = accession_ids,
-    observationVariableNames = list(target_trait),
-    pageSize = 1000000
-  )
-  print(paste("Searching for yield data on", length(accession_ids), "accessions..."))
-  resp <- wheat$post("/search/observations", body = payload)
-  if (!is.null(resp$result$data)) {
-    return(resp$result$data)
-  } 
-  search_id <- resp$result$searchResultDbId
-  if (!is.null(search_id)) {
-    print("Server is processing... fetching results via Search ID.")
-    final_resp <- wheat$get(paste0("/search/observations/", search_id), query=list(pageSize=100000))
-    return(final_resp$result$data)
+pb <- txtProgressBar(min=1, max=length(focal_ids), style = 3)
+
+for(i in seq_along(focal_ids)){
+  setTxtProgressBar(pb, i)
+  search <- try(wheat$search("/observations", body=list(germplasmDbIds = c(focal_ids[i]), pageSize=10000)))
+  results <- search$combined_data
+  if(!is.null(results) && length(results) > 0) {
+    results <- results %>%
+      map(function(item){
+        item[vars_rm] <- NULL
+        return(item)
+      }) %>% 
+      bind_rows
+    if(nrow(results) > 0){
+      results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+      all_observations <- bind_rows(all_observations, results)
+    }
   }
-  
-  return(NULL)
 }
+close(pb)
 
-focal_yield <- get_yield(focal_ids)
-
-if (!is.null(focal_yield) && length(focal_yield) > 0) {
-  focal_yield <- map_dfr(focal_yield, function(obs) {
-    tibble(
-      trial_name = obs$studyName,
-      trial_id = as.character(obs$studyDbId),
-      accession_name = obs$germplasmName,
-      accession_id = obs$germplasmDbId,
-      trait = obs$observationVariableName,
-      value = as.numeric(obs$value),
-      date = obs$observationTimeStamp
-    )
-  })
-  
-  print(head(focal_yield))
-} else {
-  print("No yield data found for these accessions.")
-}
-write.csv(results, "focal_yield.csv")
+## export all accessions yield
+p2f <- here("data","phenotypic","allAccessions_yield_raw.csv") 
+write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
 ```
