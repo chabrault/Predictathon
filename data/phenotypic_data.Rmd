@@ -180,8 +180,14 @@ pb <- txtProgressBar(min=1, max=length(focal_ids), style = 3)
 
 for(i in seq_along(focal_ids)){
   setTxtProgressBar(pb, i)
-  search <- try(wheat$search("/observations", body=list(germplasmDbIds = c(focal_ids[i]), pageSize=10000)))
+  search <- try(wheat$search("/observations", body=list(
+    germplasmDbIds = c(focal_ids[i]), 
+    observationVariableDbIds = list("84527"),
+    pageSize=10000
+  )))
+  
   results <- search$combined_data
+  
   if(!is.null(results) && length(results) > 0) {
     results <- results %>%
       map(function(item){
@@ -189,8 +195,9 @@ for(i in seq_along(focal_ids)){
         return(item)
       }) %>% 
       bind_rows
+    
     if(nrow(results) > 0){
-      results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+      # We no longer need to filter here because the server only sent yield.
       all_observations <- bind_rows(all_observations, results)
     }
   }
