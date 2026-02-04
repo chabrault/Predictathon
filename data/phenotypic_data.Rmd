@@ -165,6 +165,30 @@ Modifications compared to Luke's version:
 
 ## CV0: Pull Phenotype Data for Focal Accessions
 
+Alternatives to load yield data more efficiently (?)
+
+1.  Use the \$get
+
+```         
+resp <- wheat$get("/observations",
+                  query=list(germplasmDbId=focal_ids[1],
+                             observationVariableDbIds = list("84527"),
+                             studyDbId=all_trials$id[1]), 
+                  
+                  page="all", pageSize=500)
+```
+
+2.  Use the search
+
+```         
+ search <- try(wheat$search("/observations", body=list(
+    germplasmDbIds = c(focal_ids), 
+    observationVariableDbIds = list("84527"),
+    studyDbIds=all_trials$id,
+    pageSize=10000
+  )))
+```
+
 ```{r}
 wheat <- getBrAPIConnection("T3/WheatCAP")
 focal_acc <- wheat$wizard("accessions", list(trials=c(focal_trials)), verbose=T)
