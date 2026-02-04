@@ -1,0 +1,76 @@
+---
+title: "Pull genotype data from T3"
+author: Charlotte Brault
+output: html_document
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+# Libraries
+
+```{r load libraries}
+suppressPackageStartupMessages(library(here)) # root directory
+suppressPackageStartupMessages(library(data.table)) # load data
+suppressPackageStartupMessages(library(apercu)) # ap
+suppressPackageStartupMessages(library(dplyr)) # formatting
+suppressPackageStartupMessages(library(purrr)) # handle lists
+## devtools::install_github("chabrault/HRSWGS") # custom package instal
+#suppressPackageStartupMessages(library(HRSWGS)) # custom package
+## devtools::install_github("TriticeaeToolbox/BrAPI.R")
+suppressPackageStartupMessages(library(BrAPI)) # T3 connection
+suppressPackageStartupMessages(library(DT)) # print table
+suppressPackageStartupMessages(library(ggplot2)) # plot
+suppressPackageStartupMessages(library(vcfR)) # load vcf
+```
+
+
+# Set up root directory
+
+```{r current dir}
+here::i_am("analysis/pullGenoAssociatedTrials.Rmd")
+source(here("code","useful_functions.R"))
+```
+
+
+```{r}
+trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
+                         "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
+                         "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+```
+
+
+# Create T3 connection
+
+What's the difference between getBrAPIConnection and createBrAPIConnection?
+```{r}
+#wheat <- getBrAPIConnection("T3/Wheat")
+db <- getBrAPIConnection("T3/Wheat")
+wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
+#trials_df <- T3BrapiHelpers::getAllTrialMetaData(wheat,"Wheat")
+```
+
+# Get genotyping platform used for each focal trial
+
+```{r}
+p2ds <- here("data","genotypic",trials_predictathon)
+list.files(p2ds)
+## load manifest files for each focal trial
+manifests <- map_dfr(trials_predictathon, \(x){
+  fread(here("data","genotypic",x,"manifest.csv"))
+})
+manifests
+protid = unique(manifests$protocol_id)
+```
+
+
+# Get list of associated trials
+
+```{r}
+p2f <- here("data","allTrials_metadata.csv") # path to file
+all_trials <- fread(p2f)
+all_trials$V1 <- NULL
+```
+
