@@ -1,7 +1,7 @@
 beagle.27Feb25.75f.jar (version 5.5)
 Copyright (C) 2014-2024 Brian L. Browning
 Enter "java -jar beagle.27Feb25.75f.jar" to list command line argument
-Start time: 02:59 PM CST on 05 Feb 2026
+Start time: 03:52 PM CST on 05 Feb 2026
 
 Command line: java -Xmx1820m -jar beagle.27Feb25.75f.jar
   gt=D:/workHD/Predictathon/data/genotypic/24Crk_AY2-3/clean/24Crk_AY2-3_genotypes_curated.vcf.gz
@@ -5430,8 +5430,8 @@ Cumulative Statistics:
 
 Study     markers:                2,681
 
-Haplotype phasing time:        9 seconds
-Total time:                    3 minutes 2 seconds
+Haplotype phasing time:        13 seconds
+Total time:                    40 seconds
 
-End time: 03:02 PM CST on 05 Feb 2026
+End time: 03:53 PM CST on 05 Feb 2026
 beagle.27Feb25.75f.jar finished

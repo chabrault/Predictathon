@@ -141,6 +141,12 @@ for(i in 1:nrow(all_trials)){
 close(pb)
 ```
 
+Export the table with genotyping platform info
+```{r}
+#TODO
+```
+
+
 # Explore output
 
 Number of trials with genotyped lines for each program
@@ -182,5 +188,26 @@ for(prog in focal_prg[!focal_prg %in% "USDA-ARS Kansas"]){
     )
   }
 }
+```
+# Combine all vcf files into one per program
+
+## Load vcf files
+
+```{r}
+#TODO
+```
+
+
+## Merge into one big file
+
+```{r}
+#TODO
+```
+
+
+
+## Format and impute
+```{r}
+#TODO
 ```
 
