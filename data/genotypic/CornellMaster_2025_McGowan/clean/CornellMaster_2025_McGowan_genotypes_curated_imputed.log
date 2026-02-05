@@ -1,7 +1,7 @@
 beagle.27Feb25.75f.jar (version 5.5)
 Copyright (C) 2014-2024 Brian L. Browning
 Enter "java -jar beagle.27Feb25.75f.jar" to list command line argument
-Start time: 02:58 PM CST on 05 Feb 2026
+Start time: 03:51 PM CST on 05 Feb 2026
 
 Command line: java -Xmx1820m -jar beagle.27Feb25.75f.jar
   gt=D:/workHD/Predictathon/data/genotypic/CornellMaster_2025_McGowan/clean/CornellMaster_2025_McGowan_genotypes_curated.vcf.gz
@@ -7196,8 +7196,8 @@ Cumulative Statistics:
 
 Study     markers:                7,887
 
-Haplotype phasing time:        21 seconds
-Total time:                    51 seconds
+Haplotype phasing time:        25 seconds
+Total time:                    46 seconds
 
-End time: 02:58 PM CST on 05 Feb 2026
+End time: 03:52 PM CST on 05 Feb 2026
 beagle.27Feb25.75f.jar finished
