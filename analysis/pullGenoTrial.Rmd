@@ -966,6 +966,7 @@ for(tri in trials_predictathon){
   if(!dir.exists(p2d)) dir.create(p2d, recursive = TRUE)
   vcf.p2f <- paste0(here("data","genotypic",tri,"raw"),"/",file)
   p2f.export.vcf <- paste0(p2d,"/",tri,"_genotypes_curated.vcf.gz")
+  ## use custom function from useful_functions.R
   geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
                             p2f.export.vcf=p2f.export.vcf,
                             remove.chrUkn=FALSE,
