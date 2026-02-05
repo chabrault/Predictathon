@@ -134,7 +134,6 @@ format_curate_vcf <- function(vcf.p2f=NULL,
                    " markers from unknown chromosome"))
     }
     vcf.file <- vcf.file[!vcf.file$CHROM %in% chr.unk,]
-
   }
 
   ## check for duplicated markers
@@ -241,8 +240,6 @@ format_curate_vcf <- function(vcf.p2f=NULL,
     stop("No genotypes left after removing genotypes with too many missing data")
   }
 
-
-
   ## Remove non-polymorphic markers
   if(remove.nonPolyMrk){
     nb.allele <- apply(vcf.file, 1, function(x) length(table(t(x))))
@@ -268,9 +265,13 @@ format_curate_vcf <- function(vcf.p2f=NULL,
   ## recode numerically: replace 0/0=0, 0/1 or 1/0=1 and 1/1=2
   rowN <- rownames(vcf.file)
 
-  vcf.num <- apply(vcf.file, 2, function(x) {
-    as.numeric(stringr::str_replace_all(gsub("[[:punct:]]", "", x),
-                                        c("00"="0","01"="1","10"="1","11"="2")))})
+  vcf.num <- vcf.file
+  vcf.num <-
+    apply(vcf.num, 2,
+          function(x) {
+            as.numeric(stringr::str_replace_all(gsub("[[:punct:]]", "", x),
+                                                c("00"="0","01"="1","10"="1","11"="2")))
+            })
   vcf.num <- as.data.frame(vcf.num)
   rownames(vcf.num) <- rowN
 
@@ -311,6 +312,10 @@ format_curate_vcf <- function(vcf.p2f=NULL,
     } else {
       ## use the mrk.info from the vcf file, subset selected markers
       mrk.info$ID <- paste0(gsub("Chr","chr",mrk.info$CHROM),"_",mrk.info$POS)
+      ## if marker name start with chromosome number, add chr
+      if(all(grepl("^[1-9]|U",substr(mrk.info$ID,1,1)))){
+        mrk.info$ID <- paste0("chr",mrk.info$ID)
+      }
       mrk.info <- mrk.info[match(rownames(vcf.num), mrk.info$ID),]
     }
     if(!all(c("INFO","FORMAT") %in% colnames(mrk.info))){

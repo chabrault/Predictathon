@@ -956,6 +956,57 @@ manifest
 ```
 
 
+# Convert vcf files to genomic matrix
+
+```{r}
+for(tri in trials_predictathon){
+  write(paste0("Processing trial: ", tri), stdout())
+  file <- list.files(here("data","genotypic",tri,"raw"))[1]
+  p2d <- here("data","genotypic",tri,"clean")
+  if(!dir.exists(p2d)) dir.create(p2d, recursive = TRUE)
+  vcf.p2f <- paste0(here("data","genotypic",tri,"raw"),"/",file)
+  p2f.export.vcf <- paste0(p2d,"/",tri,"_genotypes_curated.vcf.gz")
+  geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
+                            p2f.export.vcf=p2f.export.vcf,
+                            remove.chrUkn=FALSE,
+                            check.mrk.dups=TRUE,
+                            remove.nonPolyMrk=FALSE,
+                            tresh.heterozygous=NULL,
+                            check.geno.dups=TRUE,
+                            thresh.NA.ind=0.5,
+                            thresh.NA.mrk=0.5,
+                            format.names=FALSE,
+                            imputation="Beagle",
+                            p2f.beagle=here("code","beagle.27Feb25.75f.jar"),
+                            thresh.MAF=0.01,
+                            verbose=1)
+  
+  ## export numeric imputed geno file
+  p2f <- paste0(p2d,"/",tri,"_genotypes_curated_numeric.rds")
+  saveRDS(geno, file=p2f)
+  # 
+  # vcf <- vcfR::read.vcfR(file=vcf.p2f, verbose=FALSE)
+  # gt <- vcfR::extract.gt(vcf, element = "GT",
+  #                        as.numeric=F, IDtoRowNames = T)
+  # mrk_info <- tibble::as_tibble(vcfR::getFIX(vcf)) 
+  # mrk_info <- mrk_info |> 
+  #   mutate(POS=as.numeric(POS)) |> arrange(CHROM, POS) 
+  # # save R data
+  # rownames(gt) <- mrk.info$ID
+  # 
+  # 
+  # ## transform to 0/1/2 matrix
+  # 
+  # 
+  # ## export
+  # 
+  # out_rdata <- here("data", "genotypic", tri, "raw", paste0(tri,"_genotypes.RData"))
+  # save(gt, mrk_info, file=out_rdata)
+  # message("Saved RData to: ", out_rdata)
+}
+```
+
+
 <!-- For the first trial (AWY1_DVPWA_2024), there is only one genotyping protocol (291 = ThermoFisher AgriSeq 5K), let's download a VCF for this one. -->
 
 <!-- ## Download vcf for one trial -->
