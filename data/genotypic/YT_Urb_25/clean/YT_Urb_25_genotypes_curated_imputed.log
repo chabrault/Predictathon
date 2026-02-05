@@ -1,7 +1,7 @@
 beagle.27Feb25.75f.jar (version 5.5)
 Copyright (C) 2014-2024 Brian L. Browning
 Enter "java -jar beagle.27Feb25.75f.jar" to list command line argument
-Start time: 03:28 PM CST on 05 Feb 2026
+Start time: 04:01 PM CST on 05 Feb 2026
 
 Command line: java -Xmx1820m -jar beagle.27Feb25.75f.jar
   gt=D:/workHD/Predictathon/data/genotypic/YT_Urb_25/clean/YT_Urb_25_genotypes_curated.vcf.gz
@@ -1994,7 +1994,7 @@ Phasing iteration 12:          0 seconds
 Window 87 [2D:589755555-634855051]
 Study     markers:                  105
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           1 second
 Burnin  iteration 2:           0 seconds
 Burnin  iteration 3:           0 seconds
 
@@ -2040,8 +2040,8 @@ Phasing iteration 12:          0 seconds
 Window 89 [3A:42393-38114172]
 Study     markers:                  156
 
-Burnin  iteration 1:           0 seconds
-Burnin  iteration 2:           0 seconds
+Burnin  iteration 1:           1 second
+Burnin  iteration 2:           1 second
 Burnin  iteration 3:           0 seconds
 
 Estimated ne:                  29802
@@ -2431,7 +2431,7 @@ Phasing iteration 12:          0 seconds
 Window 106 [3B:343711-38794964]
 Study     markers:                  136
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           1 second
 Burnin  iteration 2:           0 seconds
 Burnin  iteration 3:           0 seconds
 
@@ -2822,7 +2822,7 @@ Phasing iteration 12:          0 seconds
 Window 123 [3B:734435022-775092241]
 Study     markers:                  151
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           1 second
 Burnin  iteration 2:           0 seconds
 Burnin  iteration 3:           0 seconds
 
@@ -3510,9 +3510,9 @@ Phasing iteration 12:          0 seconds
 Window 153 [4A:697825295-739279319]
 Study     markers:                  172
 
-Burnin  iteration 1:           0 seconds
-Burnin  iteration 2:           0 seconds
-Burnin  iteration 3:           0 seconds
+Burnin  iteration 1:           1 second
+Burnin  iteration 2:           1 second
+Burnin  iteration 3:           1 second
 
 Estimated ne:                  29064
 Estimated err:                 1.0e-04
@@ -4450,9 +4450,9 @@ Phasing iteration 12:          0 seconds
 Window 194 [5A:546767144-586599769]
 Study     markers:                   89
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           1 second
 Burnin  iteration 2:           0 seconds
-Burnin  iteration 3:           0 seconds
+Burnin  iteration 3:           1 second
 
 Estimated ne:                  21807
 Estimated err:                 4.6e-05
@@ -4910,7 +4910,7 @@ Phasing iteration 12:          0 seconds
 Window 214 [5B:665520832-712850617]
 Study     markers:                  110
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           2 seconds
 Burnin  iteration 2:           0 seconds
 Burnin  iteration 3:           0 seconds
 
@@ -4918,7 +4918,7 @@ Estimated ne:                  19617
 Estimated err:                 1.8e-04
 
 Phasing iteration 1:           0 seconds
-Phasing iteration 2:           0 seconds
+Phasing iteration 2:           1 second
 Phasing iteration 3:           0 seconds
 Phasing iteration 4:           0 seconds
 Phasing iteration 5:           0 seconds
@@ -5209,8 +5209,8 @@ Phasing iteration 12:          0 seconds
 Window 227 [6A:724151-40712766]
 Study     markers:                  140
 
-Burnin  iteration 1:           0 seconds
-Burnin  iteration 2:           0 seconds
+Burnin  iteration 1:           1 second
+Burnin  iteration 2:           1 second
 Burnin  iteration 3:           0 seconds
 
 Estimated ne:                  26815
@@ -6175,7 +6175,7 @@ Phasing iteration 12:          0 seconds
 Window 269 [7A:715636-40176352]
 Study     markers:                  160
 
-Burnin  iteration 1:           0 seconds
+Burnin  iteration 1:           1 second
 Burnin  iteration 2:           0 seconds
 Burnin  iteration 3:           0 seconds
 
@@ -7280,8 +7280,8 @@ Cumulative Statistics:
 
 Study     markers:                9,588
 
-Haplotype phasing time:        2 minutes 22 seconds
-Total time:                    3 minutes 3 seconds
+Haplotype phasing time:        3 minutes 51 seconds
+Total time:                    4 minutes 15 seconds
 
-End time: 03:31 PM CST on 05 Feb 2026
+End time: 04:06 PM CST on 05 Feb 2026
 beagle.27Feb25.75f.jar finished
