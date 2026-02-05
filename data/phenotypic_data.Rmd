@@ -198,37 +198,23 @@ colnames(focal_acc)[2] = "acc_name"
 focal_ids <- focal_acc$acc_id
 wheat <- getBrAPIConnection("T3/Wheat")
 vars_rm <- "season"
-all_observations <- data.frame()
 
-pb <- txtProgressBar(min=1, max=length(focal_ids), style = 3)
-
-for(i in seq_along(focal_ids)){
-  setTxtProgressBar(pb, i)
-  search <- try(wheat$search("/observations", body=list(
-    germplasmDbIds = c(focal_ids[i]), 
+ search <- try(wheat$search("/observations", body=list(
+    germplasmDbIds = c(focal_ids), 
     observationVariableDbIds = list("84527"),
-    pageSize=10000
+    studyDbIds=all_trials$id,
+    pageSize=100000
   )))
-  
-  results <- search$combined_data
-  
-  if(!is.null(results) && length(results) > 0) {
-    results <- results %>%
-      map(function(item){
-        item[vars_rm] <- NULL
-        return(item)
-      }) %>% 
-      bind_rows
-    
-    if(nrow(results) > 0){
-      # We no longer need to filter here because the server only sent yield.
-      all_observations <- bind_rows(all_observations, results)
-    }
-  }
-}
-close(pb)
 
+  results <- search$combined_data
+  results <- results %>%
+    map(function(item){
+      item[vars_rm] <- NULL
+      return(item)
+    }) %>% 
+    bind_rows
+ 
 ## export all accessions yield
 p2f <- here("data","phenotypic","allAccessions_yield_raw.csv") 
-write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
+write.table(results, p2f, sep=",", row.names=F, quote=F)
 ```
