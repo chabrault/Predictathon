@@ -86,12 +86,11 @@ The phenotypic data is the curated data for the SDSU breeding program. We extrac
 ```{r load_pheno_trials}
 p2f <- here("data","phenotypic","allAccessions_yield_raw.csv")
 
-file.mtime(p2f)
 pheno <- fread(p2f)
 dim(pheno)
 head(pheno)
-(ngeno <- length(intersect(pheno$germplasmName,rownames(geno))))
-pheno.geno <- pheno |> filter(germplasmName %in% rownames(geno))
+#(ngeno <- length(intersect(pheno$germplasmName,rownames(geno))))
+#pheno.geno <- pheno |> filter(germplasmName %in% rownames(geno))
 #setdiff(pheno$GID, rownames(geno))
 str(pheno)
 
@@ -176,14 +175,18 @@ env_ix <- as.integer(ph_small$env)
 gid_ix <- as.integer(ph_small$gid)
 n_env  <- nlevels(ph_small$env)
 n_gid  <- nlevels(ph_small$gid)
-
-# Sparse incidence matrix: rows = env, cols = gid; 1 if tested
 M <- sparseMatrix(i = env_ix, j = gid_ix, x = 1, dims = c(n_env, n_gid),
                   dimnames = list(levels(ph_small$env), levels(ph_small$gid)))
 
 C_counts <- M %*% t(M)                    
 C_counts <- as.matrix(C_counts)
 C_counts
+
+
+
+## Based on data inspection, remove the suspect environments form the 'pheno' file
+
+
 
 
 
