@@ -63,13 +63,12 @@ Load the cleaned and imputed genomic data, filtered for minor allele frequency a
 File generated in `combine_format_vcf`.
 
 ```{r load_geno}
-ninds.geno <- 1679 ; pop_code.geno <- "MSU2022-MSU2025-W3K"
 
-p2f.geno <- here("data","genotypic", "merged_3K",
-                 paste0(pop_code.geno, "_genoMatrix_",ninds.geno,"inds.rds"))
+p2f.geno <- here("data","genotypic", "YT_Urb_25","clean","YT_Urb_25_genotypes_curated_numeric.rds")
 file.mtime(p2f.geno)
 geno <- readRDS(p2f.geno)
 dim(geno)
+ap(geno)
 geno.init <- geno
 geno <- janitor::remove_constant(geno)
 geno[,2:ncol(geno)] <- scale(geno[,2:ncol(geno)], center=T, scale=T)
@@ -85,20 +84,14 @@ gid.geno <- rownames(geno)
 The phenotypic data is the curated data for the SDSU breeding program. We extracted the BLUPs in the script `format_pheno_statgenSTA.Rmd`.
 
 ```{r load_pheno_trials}
-## load BLUPs for advanced trials
-pop_code.trial <- "AllMTtrials_2013-2024"
-## values obtained from the script format_pheno_trials.Rmd
-# par.gv <- "BLUEs"#"CheckCorr" ## "mean","BLUPs"
-# ## values obtained from the script format_pheno_trials_statgenSTA.Rmd
-# p2f <- here("output",paste0("BLUPs_6traits_",pop_code.trial,"_statgenSTA-",
-#                             par.gv,".tsv"))
-p2f <- here("data","phenotypic",paste0(pop_code.trial,"_statgenSTA-BLUPs.tsv"))
+p2f <- here("data","phenotypic","allAccessions_yield_raw.csv")
 
 file.mtime(p2f)
-pheno <- read.table(file=p2f, header=T, sep="\t")
+pheno <- fread(p2f)
 dim(pheno)
 head(pheno)
-(ngeno <- length(intersect(pheno$GID,rownames(geno))))
+(ngeno <- length(intersect(pheno$germplasmName,rownames(geno))))
+pheno.geno <- pheno |> filter(germplasmName %in% rownames(geno))
 #setdiff(pheno$GID, rownames(geno))
 ```
 

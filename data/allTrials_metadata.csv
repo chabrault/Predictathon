@@ -1,4 +1,4 @@
-focal_trial,id,name,location,year,program,isFocal
+focal_trial,studyDbId,name,location,year,program,isFocal
 Washington State University,10701,AHR1_HRW_2022_Davenport,Davenport, WA,2022,Washington State University,FALSE
 Washington State University,10845,AHR1_HRW_2023_Davenport,Davenport, WA,2023,Washington State University,FALSE
 Washington State University,10632,AWY1_DVP_2025,Davenport, WA,2025,Washington State University,FALSE

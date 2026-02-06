@@ -14,6 +14,8 @@ suppressPackageStartupMessages(library(tidyverse)) # data handling
 suppressPackageStartupMessages(library(here)) # root directory
 suppressPackageStartupMessages(library(apercu)) # look at lists
 suppressPackageStartupMessages(library(progress)) # progress bar
+suppressPackageStartupMessages(library(data.table)) # fread read table
+
 ```
 
 # Set up root directory
@@ -31,11 +33,9 @@ source(here("code","useful_functions.R"))
 
 ```{r}
 rm(list=ls())
-library(BrAPI)
-library(purrr)
-library(tidyverse)
 
 wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
+wheat <- getBrAPIConnection("T3/Wheat")
 
 wheat$login("LukeLeBar", "Imagine2003")
 
@@ -85,11 +85,11 @@ focal_metadata <- do.call(rbind, results_list)
 programs <- focal_metadata$program
 all_trials_list <- list()
 for (prog in programs) {
-  resp <- wheat$get("/studies", query = list(programName=prog, pageSize=1000))
+  resp <- wheat$get("/studies", query = list(programName=prog, pages="all", pageSize=1000))
   if (length(resp$data) == 0) next
   ## create a data frame summarizing trial id, name, location, year, program
   prog_trials <- lapply(resp$data, function(x) {
-    data.frame(id = x$studyDbId, 
+    data.frame(studyDbId = x$studyDbId, 
                name = x$studyName, 
                location = x$locationName,
                year=paste(unlist(x$seasons), collapse=", "), 
@@ -117,44 +117,45 @@ all(focal_trials %in% all_trials$name)
 ## export trial names to pull genotypic data from it
 p2f <- here("data","allTrials_metadata.csv") # path to file
 write.table(all_trials, p2f, sep=",", row.names=F, quote=F)
+
+all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
+trial_ids <- all_trials$id
+vars_rm <- "season"
 ```
 
 ### Yield Data for All Trials
 
 ```{r}
-all_trials <- all_trials %>% filter(!name %in% focal_metadata$trial_name)
-trial_ids <- all_trials$id
-wheat <- getBrAPIConnection("T3/Wheat")
-vars_rm <- "season"
 
-all_observations <- data.frame()
-
-pb <- txtProgressBar(min=1, max=length(trial_ids), style = 3)
-## this trial id is long: 10703
-## this trial id times out: 10710, 10876
-trial_ids <- trial_ids[!trial_ids %in% c("10703","10710","10876")]
-
-for(i in seq_along(trial_ids)){
-  setTxtProgressBar(pb, i)
-  #write(paste0("Processing trial ", i, " of ", length(trial_ids)), stdout())
-  search <- try(wheat$search("/observations", body=list(studyDbIds = c(trial_ids[i]))))
-  results <- search$combined_data
-  results <- results %>%
-    map(function(item){
-      item[vars_rm] <- NULL
-      return(item)
-    }) %>% 
-    bind_rows
-  if(nrow(results) >0){
-    results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
-    all_observations <- bind_rows(all_observations, results)
-  }
-}
-close(pb)
-
-## export all trials yield
-p2f <- here("data","phenotypic","allTrials_yield_raw.csv") # path to file
-write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
+# 
+# all_observations <- data.frame()
+# 
+# pb <- txtProgressBar(min=1, max=length(trial_ids), style = 3)
+# ## this trial id is long: 10703
+# ## this trial id times out: 10710, 10876
+# trial_ids <- trial_ids[!trial_ids %in% c("10703","10710","10876")]
+# 
+# for(i in seq_along(trial_ids)){
+#   setTxtProgressBar(pb, i)
+#   #write(paste0("Processing trial ", i, " of ", length(trial_ids)), stdout())
+#   search <- try(wheat$search("/observations", body=list(studyDbIds = c(trial_ids[i]))))
+#   results <- search$combined_data
+#   results <- results %>%
+#     map(function(item){
+#       item[vars_rm] <- NULL
+#       return(item)
+#     }) %>% 
+#     bind_rows
+#   if(nrow(results) >0){
+#     results <- results %>% filter(observationVariableName == "Grain yield - kg/ha|CO_321:0001218")
+#     all_observations <- bind_rows(all_observations, results)
+#   }
+# }
+# close(pb)
+# 
+# ## export all trials yield
+# p2f <- here("data","phenotypic","allTrials_yield_raw.csv") # path to file
+# write.table(all_observations, p2f, sep=",", row.names=F, quote=F)
 ```
 
 Modifications compared to Luke's version:
@@ -171,41 +172,48 @@ Alternatives to load yield data more efficiently (?)
 
 ```         
 resp <- wheat$get("/observations",
-                  query=list(germplasmDbId=focal_ids[1],
-                             observationVariableDbIds = list("84527"),
-                             studyDbId=all_trials$id[1]), 
-                  
-                  page="all", pageSize=500)
+query=list(germplasmDbId=focal_ids[1],
+observationVariableDbIds = list("84527"),
+studyDbId=all_trials$id[1]), 
+
+page="all", pageSize=500)
 ```
 
 2.  Use the search
 
 ```         
- search <- try(wheat$search("/observations", body=list(
-    germplasmDbIds = c(focal_ids), 
-    observationVariableDbIds = list("84527"),
-    studyDbIds=all_trials$id,
-    pageSize=10000
-  )))
+search <- try(wheat$search("/observations", body=list(
+germplasmDbIds = c(focal_ids), 
+observationVariableDbIds = list("84527"),
+studyDbIds=all_trials$id,
+pageSize=10000
+)))
 ```
 
 ```{r}
-wheat <- getBrAPIConnection("T3/WheatCAP")
-focal_acc <- wheat$wizard("accessions", list(trials=c(focal_trials)), verbose=T)
-focal_acc <- as.data.frame(cbind(focal_acc$data$ids, focal_acc$data$names))
-colnames(focal_acc)[1] = "acc_id"
-colnames(focal_acc)[2] = "acc_name"
-focal_ids <- focal_acc$acc_id
-wheat <- getBrAPIConnection("T3/Wheat")
-vars_rm <- "season"
 
- search <- try(wheat$search("/observations", body=list(
+p2f <- here("data","phenotypic","allAccessions_yield_raw.csv") 
+if(file.exists(p2f)){
+  results <- fread(p2f, header=T, sep=",")
+} else {
+  
+  wheat <- getBrAPIConnection("T3/WheatCAP")
+  focal_acc <- wheat$wizard("accessions", list(trials=c(focal_trials)), verbose=T)
+  focal_acc <- as.data.frame(cbind(focal_acc$data$ids, focal_acc$data$names))
+  colnames(focal_acc)[1] = "acc_id"
+  colnames(focal_acc)[2] = "acc_name"
+  focal_ids <- focal_acc$acc_id
+  wheat <- getBrAPIConnection("T3/Wheat")
+  vars_rm <- "season"
+  
+  search <- try(wheat$search("/observations", body=list(
     germplasmDbIds = c(focal_ids), 
     observationVariableDbIds = list("84527"),
     studyDbIds=all_trials$id,
+    page="all",
     pageSize=100000
   )))
-
+  
   results <- search$combined_data
   results <- results %>%
     map(function(item){
@@ -213,8 +221,22 @@ vars_rm <- "season"
       return(item)
     }) %>% 
     bind_rows
- 
-## export all accessions yield
-p2f <- here("data","phenotypic","allAccessions_yield_raw.csv") 
-write.table(results, p2f, sep=",", row.names=F, quote=F)
+  ## export all accessions yield
+  write.table(results, p2f, sep=",", row.names=F, quote=F)
+}
+
 ```
+
+Add the trial metadata in that file if not already present
+
+```{r}
+colN <- colnames(results)
+if(!"location" %in% colN){
+  results <- results |> 
+    mutate(studyDbId = as.character(studyDbId)) |> 
+    left_join(all_trials, by=c("studyDbId"="studyDbId"))
+  ## export all accessions yield with trial metadata
+  write.table(results, p2f, sep=",", row.names=F, quote=F)
+}
+```
+
