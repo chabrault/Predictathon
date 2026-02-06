@@ -213,7 +213,7 @@ year_loc
 
 
 
-##############################
+##########################################################################################
 ### get BLUEs for each program
 
 ## Note: some program have only one location and some have multiple locations over years
@@ -228,12 +228,12 @@ one_loc_programs <- c(
   "University of Minnesota"
 )
 
-# output folder (under existing project 'output/')
+
 out_dir <- here("output", "BLUEs_by_program_oneLoc")
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 
-get_blues_simple <- function(d) {
+get_blues_oneLOC <- function(d) {
   fit <- lmer(value ~ 0 + germplasmName + (1|year), data = d, REML = TRUE)
   fe <- fixef(fit)                 
   V  <- vcov(fit)                  
@@ -246,7 +246,6 @@ get_blues_simple <- function(d) {
     SE            = as.numeric(se)
   )
 
-  # add within-program counts for context
   n_tab <- d[, .N, by = germplasmName]
   setnames(n_tab, "N", "n")
 
@@ -259,12 +258,54 @@ for (pg in one_loc_programs) {
   dpg <- pheno_suspect_removed[focal_trial == pg & !is.na(value)]
   dpg <- droplevels(dpg)
 
-  res <- get_blues_simple(dpg)
+  res <- get_blues_oneLOC(dpg)
 
-  # save
+ 
 fwrite(res, here("output","BLUEs_by_program_oneLoc",
                  paste0(pg, "_BLUEs.csv")))
 }
+
+
+#### Programs with more than one locations
+multi_loc_programs <- c(
+  "Michigan State University",
+  "TAMU",
+  "USDA-ARS Kansas",
+  "University of Wisconsin",
+  "Washington State University"
+)
+
+out_dir <- here("output", "BLUEs_by_program_multiLoc")
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+get_blues_multiloc <- function(d) {
+  fit <- lmer(value ~ 0 + germplasmName + (1|year) + (1|location), data = d, REML = TRUE)   # genotype fixed, year & location random; NO intercept
+
+  fe <- fixef(fit)                 
+  V  <- vcov(fit)
+  se <- sqrt(diag(V))
+
+  blues <- data.table(
+    germplasmName = sub("^germplasmName", "", names(fe)),
+    BLUE          = as.numeric(fe),
+    SE            = as.numeric(se)
+  )
+
+  n_tab <- d[, .N, by = germplasmName][, .(germplasmName, n = N)]
+  merge(blues, n_tab, by = "germplasmName", all.x = TRUE)
+}
+
+# loop over programs
+for (pg in multi_loc_programs) {
+  cat("analyzing:", pg, "\n")
+  dpg <- pheno_suspect_removed[focal_trial == pg & !is.na(value)]
+  dpg <- droplevels(dpg)
+
+  res <- get_blues_multiloc(dpg)
+
+fwrite(res, here("output","BLUEs_by_program_multiLoc",
+                 paste0(pg, "_BLUEs.csv")))}
+
 
 
 ```
