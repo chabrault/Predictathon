@@ -1,0 +1,415 @@
+---
+title: "Load and curate genomic MSU breeding program data"
+author: Charlotte Brault
+output: html_document
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+
+```{r load libraries}
+suppressPackageStartupMessages(library(here)) # root directory
+suppressPackageStartupMessages(library(data.table)) # load data
+suppressPackageStartupMessages(library(apercu)) # ap
+suppressPackageStartupMessages(library(dplyr)) # formatting
+suppressPackageStartupMessages(library(ggplot2)) # plot
+suppressPackageStartupMessages(library(paletteer)) # plot palette
+suppressPackageStartupMessages(library(janitor)) # formatting
+#suppressPackageStartupMessages(library(rTASSEL)) # imputation
+suppressPackageStartupMessages(library(vcfR)) # handle vcf
+suppressPackageStartupMessages(library(ade4)) # PCA
+suppressPackageStartupMessages(library(factoextra)) # PCA
+suppressPackageStartupMessages(library(forcats)) # reorder factor 
+suppressPackageStartupMessages(library(ggrepel)) # plot labels  
+#devtools::install_github("chabrault/HRSWGS")
+suppressPackageStartupMessages(library(HRSWGS)) ## custom functions
+## load custom functions, for example, 'format_curate_vcf
+#source(here("code","useful_functions.R")) 
+```
+
+
+# Set up 
+
+```{r current dir}
+## define a code for this population, to put in file names
+pop_code <- "MSU2022-MSU2025-W3K"
+```
+
+
+This R chunk is used to assess how much time it takes to execute the R code in this document until the end:
+
+```{r time_0}
+t0 <- proc.time()
+```
+
+
+
+# Process files
+
+Combine several vcf files from different cohorts into one file. The goal is to have a single vcf file and matrix with all the genotypes and markers, and to format it in a way that is usable for genomic prediction.
+
+## Load vcf files
+
+The vcf files are located in the `data/genotypic` folder, in subfolders for each cohort. The files are named with the cohort name and the marker set version. The files are in VCF format, which is a standard format for storing genetic variation data.
+
+```{r load_vcfs}
+p2fs <- c(here("data","genotypic","MSU2022","MT2022Cook-WheatCAP3K_01-05.CSv2_IDnum.vcf"),
+          here("data","genotypic","MSU2023","MSU2023Cook-WheatCAP3K_01-05.CSv2_IDnum.vcf"),
+          here("data","genotypic","MSU2025","MT2025Cook-W3K_01-09.CSv2.IDnum.vcf"))
+vcf.read <- list() ; i <- 1
+for(file in p2fs){
+  vcf <- vcfR::read.vcfR(file=file, verbose=FALSE)  
+  vcf.read$gt[[i]] <- vcfR::extract.gt(vcf, element = "GT", as.numeric=F, IDtoRowNames = T)
+  vcf.read$mrk.info[[i]] <- tibble::as_tibble(vcfR::getFIX(vcf))
+  vcf.read$mrk.info[[i]] <- vcf.read$mrk.info[[i]] |>
+    mutate(POS=as.numeric(POS)) |> arrange(CHROM, POS)
+  i <- i + 1
+  rm(vcf)
+}
+```
+
+
+
+## Extract and combine marker information
+
+Use marker information from the first table. There is one marker which is not present in both VCFs, it's located on chromosome unknown, let's remove it.
+
+For *Fhb1*, I changed manually the position of the marker. It was initially located on the chromosome 5B because it is absent from the Chinese Spring. Jason Fiedler advised to put it on chromosome 3B, at position 12,400,000.
+
+```{r combine_files_mrk}
+mrk1 = vcf.read$mrk.info[[1]]
+mrk2 = vcf.read$mrk.info[[2]]
+setdiff(mrk1$ID, mrk2$ID) 
+
+mrk.info <- as.data.frame(vcf.read$mrk.info[[1]])
+mrk.info <- mrk.info[!mrk.info$ID %in% setdiff(mrk1$ID, mrk2$ID),]
+idx <- which(mrk.info$ID %in% "Fhb1-TaHRC-R-HEX-DEL-F")
+mrk.info[idx,] 
+mrk.info[idx,c("CHROM","POS")] <- c("Chr3B","12400000")
+mrk.info <- mrk.info |> mutate(POS=as.numeric(POS)) |> arrange(CHROM, POS) |> 
+  mutate(chr_pos=paste0(gsub("Chr","chr",CHROM),"_",POS), .after=ID)
+head(mrk.info)
+p2f <- here("data","genotypic","merged_3K",paste0(pop_code,"_combined_CSv2_mrkInfo.tsv"))
+write.table(mrk.info, p2f,sep="\t", quote=FALSE, row.names=FALSE)
+```
+
+
+
+
+Combine gentoypic tables
+```{r}
+mrkID <- mrk.info$ID
+gt.all <- do.call(cbind, lapply(vcf.read$gt, function(x) x[mrkID,]))
+
+## add CHROM/POS columns to gt.all
+gt.all <- cbind(mrk.info[,c("CHROM","POS")],gt.all[mrk.info$ID,])
+ap(gt.all)
+dim(gt.all)
+```
+
+
+
+## Load VCF samples
+
+Filter based on call rate and find duplicate genotypes.
+
+```{r load_vcf_samples}
+p2fs <- c(here("data","genotypic","MSU2022","MT2022Cook-WheatCAP3K_01-05_VCF-Samples.txt"),
+          here("data","genotypic","MSU2023","MSU2023Cook-WheatCAP3K_01-05-VCF-Samples.txt"),
+          here("data","genotypic","MSU2025","MT2025Cook-W3K_01-09-VCF-Samples.txt"))
+list.names <- purrr::map(p2fs, fread)
+ap(list.names)
+
+list.names[[3]] <- list.names[[3]] |> rename("IDnumVCF Name"="Sample IDnumVCF Name")
+geno.info <- do.call(plyr::rbind.fill, list.names)
+
+geno.info <- geno.info |> 
+  dplyr::select(`IDnumVCF Name`, `Sample ID`, `Call Rate`, `Sample Name`,`Sample Group`) |>
+  rename(IDnum="IDnumVCF Name",
+         GID="Sample ID",
+         PEDIGREE="Sample Name",
+         GROUP="Sample Group",
+         CallRate="Call Rate") |> 
+  mutate(CallRate=as.numeric(CallRate))
+
+## genotypes with low call rate to remove
+geno.info |> filter(CallRate < 0.8)
+geno2rem <- geno.info |> filter(CallRate < 0.8) |> pull(IDnum)
+length(geno2rem)
+dim(gt.all)
+```
+
+## Genotype names
+
+Load genotype correspondence
+```{r}
+p2f <- here("data","Experimental.vs.VarietyNameKey.xlsx")
+file.mtime(p2f)
+key <- readxl::read_xlsx(p2f)
+head(key)
+dim(key)
+
+## switch genotype names to their released cultivar names
+geno.info$GID <- plyr::mapvalues(geno.info$GID, 
+                                 from=key$`Experiemental Code`, 
+                                 to=key$`Variety Name`, warn_missing=F)
+```
+
+Load key for pedigrees
+```{r}
+p2f <- here("data","phenoPedigree_duplicates.xlsx")
+file.mtime(p2f)
+key.ped <- readxl::read_xlsx(p2f, na = "NA")
+head(key.ped)
+dim(key.ped)
+key.ped$GID <- format_names(key.ped$GID)$corrected
+key.ped <- distinct(key.ped)
+```
+
+Switch genotype names in pedigree
+```{r}
+geno.info$PEDIGREE <- gsub("(3K)[0-9]*|GBS-[0-9]*",NA, geno.info$PEDIGREE) # remove 3K numbers
+for(i in 1:nrow(key)){
+  geno.info$PEDIGREE <- stringr::str_replace(string=geno.info$PEDIGREE,
+                                             pattern=key[i,"Experiemental Code",drop=T],
+                                             replacement=key[i,"Variety Name",drop=T])
+  
+}
+```
+
+
+## Detect duplicated genotypes
+
+TODO: need to check back if we really need to remove the WPS2 genotypes
+
+```{r}
+## change genotype names
+### for genotypes starting with PI, switch their name to the pedigree
+geno.info[grep("^PI",geno.info$GID),]
+geno.info$GID[grep("^PI", geno.info$GID)] <- 
+  geno.info$PEDIGREE[grep("^PI", geno.info$GID)]
+
+## detect duplicated genotypes
+#grep("VIDA", geno.info$GID, value=TRUE)
+#grep("CHOTEAU", geno.info$GID, value=TRUE)
+#grep("MCNEAL", geno.info$GID, value=TRUE)
+
+## check correspondence for VIDA
+idxVIDA <- grep("VIDA", geno.info$GID, value=FALSE)
+idnumVIDA <- geno.info$IDnum[idxVIDA]
+#gt.all[,idnumVIDA]
+## concordance
+# caret::confusionMatrix(as.factor(gt.all[,idnumVIDA[3]]),
+#                        as.factor(gt.all[,idnumVIDA[4]]))
+### remove the WPSP2 genotype
+geno2rem <- c(geno2rem, idnumVIDA[c(3,4)]) ## remove WPSP2
+
+
+## check correspondence for CHOTEAU
+idxCHOTEAU <- grep("CHOTEAU", geno.info$GID, value=FALSE)
+idnumCHOTEAU <- geno.info$IDnum[idxCHOTEAU]
+#gt.all[,idnumCHOTEAU]
+## concordance
+#caret::confusionMatrix(as.factor(gt.all[,idnumCHOTEAU[2]]), as.factor(gt.all[,idnumCHOTEAU[3]]))
+### remove the WPSP2 genotype
+geno2rem <- c(geno2rem, idnumCHOTEAU[c(2,3)]) ## remove WPSP2
+
+
+caret::confusionMatrix(as.factor(gt.all[,idnumCHOTEAU[1]]), as.factor(gt.all[,idnumVIDA[1]]))
+
+## check correspondence for MCNEAL
+idxMCNEAL <- grep("MCNEAL", geno.info$GID, value=FALSE)
+idnumMCNEAL <- geno.info$IDnum[idxMCNEAL]
+#gt.all[,idnumMCNEAL]
+## concordance
+#caret::confusionMatrix(as.factor(gt.all[,idnumMCNEAL[1]]), as.factor(gt.all[,idnumMCNEAL[2]]))
+### remove the WPSP2 genotype
+geno2rem <- c(geno2rem, idnumMCNEAL[c(2)]) ## remove WPSP2
+geno2rem
+geno.info <- geno.info[!geno.info$IDnum %in% geno2rem,]
+
+grep("WPSP2", geno.info$GID, value=TRUE)
+gt.all <- gt.all[,!colnames(gt.all) %in% geno2rem]
+
+```
+
+
+
+## Format files
+
+Keep track of genotype names and information
+```{r}
+ap(vcf.read$gt)
+# geno.list <- lapply(vcf.read$gt, function(x) colnames(x))
+
+#geno.info <- data.frame(GID=unique(geno.corresp$final))
+geno.info$COHORT <- stringr::str_extract(pattern = "^MT([0-9]{2})[0-9]+$",
+                                         geno.info$GID,group=1) 
+
+# geno.info$GID <-  plyr::mapvalues(geno.info$GID, 
+#                                   from=df.corresp[,1], 
+#                                   to=df.corresp[,2], warn_missing=F)
+
+geno.info$GID <- format_names(geno.info$GID)$corrected
+table(geno.info$COHORT)
+
+## show first rows for each cohort
+geno.info |> group_by(COHORT) |>slice_head(n=3) 
+
+## replace the pedigree by the key pedigree is present
+cmon <- intersect(geno.info$GID, key.ped$GID)
+geno.info$PEDIGREE[geno.info$GID %in% cmon] <-
+  plyr::mapvalues(geno.info$GID[geno.info$GID %in% cmon], 
+                  from=key.ped$GID,to=key.ped$PEDIGREE,
+                  warn_missing=FALSE)
+```
+
+
+# Format and impute vcf file
+
+Use the custom function `format_curate_vcf` to format the genotype data. This function will remove duplicated markers and genotypes, markers from chromosome unknown, format in 0/1/2, and remove markers with too much missing data. If the option is selected, the imputation is done using the kNNI method from the `rTASSEL` package.
+
+*Explanation of parameters:*
+
+- **vcf.p2f**: path to the vcf file
+- **matrix.gt**: genotypic matrix extracted from a vcf file, with CHROM, POS and markers as columns. Filled with "0/0", "0/1", "1/1", "./." for missing data.
+- **mrk.info**: data frame with the marker information, with CHROM, POS and ID as columns.
+- **p2f.export.vcf**: path to file to export the cleaned vcf file
+- **corresp.geno.name**: data frame with two columns, the first with the genotype names in the vcf file and the second with the genotype names to replace them.
+- **IDnum**: logical (TRUE or FALSE), indicate if the genotype names are in the format idxxx-[name].
+- **remove.chrUkn**: logical (TRUE or FALSE), indicate if the chromosome unknown should be removed.
+- **check.mrk.dups**: logical, indicate if the function should check for duplicated markers. In that case, the marker with the lowest rate of missing data is kept.
+- **check.geno.dups**: logical, indicate if the function should check for duplicated markers. In that case, the individual with the lowest rate of missing data is kept.
+- **thresh.NA.ind**: threshold to filter out a genotype if there is too many missing data.
+- **thresh.NA.mrk**: threshold to  filter out a marker if there is too many missing data.
+- **imputation**: character to indicate the imputation method, either *kNNI*" using `rTASSEL` package or *Beagle* (need to provide *p2f.beagle* in that case)
+- **p2f.beagle**: path to the Beagle jar file.
+- **format.names**: logical, indicate if the function `format_names` should be used to curate the genotype names (switch to upper case, replace white spaces and special characters by "_")
+- **thresh.MAF**: threshold for minor allele frequency, should be between 0 and 0.5.
+- **verbose**: integer, level of verbosity of the function.
+
+| check the function parameters by typing `?format_curate_vcf` in the console. |
+
+```{r vcf_curation, echo=FALSE}
+mrk.info$CHROM<- gsub("Chr","chr",mrk.info$CHROM) # change Chr to chr
+p2f.export.vcf <- here("data","genotypic","merged_3K",
+                       paste0(pop_code,"_ALL_formatted"))
+if(!file.exists(p2f.export.vcf)){
+  
+  geno.imp <- format_curate_vcf(vcf.p2f=NULL,
+                                matrix.gt=gt.all,
+                                mrk.info=mrk.info,
+                                corresp.geno.name=geno.info,
+                                p2f.export.vcf=p2f.export.vcf,
+                                IDnum=FALSE,
+                                remove.chrUkn=TRUE, 
+                                check.mrk.dups=TRUE, 
+                                check.geno.dups=TRUE, 
+                                remove.nonPolyMrk = FALSE,
+                                tresh.heterozygous=0.25,
+                                thresh.NA.ind=0.25,
+                                thresh.NA.mrk=0.25,
+                                imputation="Beagle",
+                                p2f.beagle = here("code","beagle.27Feb25.75f.jar"),
+                                format.names=TRUE,
+                                thresh.MAF=0.01,verbose=1)
+  rm(gt.all)
+  ## if the VCF formatting is already done, load the genotypic matrix
+} else{
+  ninds <- 1679
+  p2f.geno <-here("data","genotypic" ,"merged_3K",
+                  paste0(pop_code, "_genoMatrix_",ninds,"inds.rds"))
+  geno.imp <- readRDS(p2f.geno)
+}
+
+ap(geno.imp)
+dim(geno.imp) ## 1679 genotypes x 3100 markers 
+```
+
+# Export files
+
+Use the **.rds** format to save the genotype matrix and the genomic relationship matrix. It can be read using the `readRDS` function.
+
+```{r save_outputs}
+(ninds <- nrow(geno.imp))
+# p2f.geno.imp2 <- here("output", "genom_pred","input",
+#                       paste0(pop_code, "_genoMatrix_",ninds,"inds.rds"))
+# saveRDS(geno.imp, p2f.geno.imp2)
+
+(p2f.geno <- here("data","genotypic" ,"merged_3K",
+                 paste0(pop_code, "_genoMatrix_",ninds,"inds.rds")))
+saveRDS(geno.imp, p2f.geno)
+
+## calculate the genomic relationship matrix
+GRM <- rrBLUP::A.mat(X=geno.imp-1)
+dim(GRM)
+ap(GRM)
+## don't save the GRM file, too big
+# p2f <- here("output", "genom_pred","input",
+#             paste0(pop_code, "_GRM_",ninds,"inds.rds"))
+# saveRDS(GRM, p2f)
+
+
+
+## detect the checks
+unique(grep("MT",geno.info$GID,invert = TRUE, value=TRUE))
+
+checks <- c("VIDA","CHOTEAU","LANNING","DAGMAR","MCNEAL","REEDER",
+            "DUCLAIR","SCHOLAR")
+table(geno.info$COHORT)
+## export genotype information
+geno.info <- geno.info |> select(-IDnum,-CallRate) |> distinct()
+p2f <- here("data","genotypic","merged_3K",paste0(pop_code,"_genotype_info_init.tsv"))
+write.table(geno.info, p2f, sep="\t", quote=FALSE, row.names=FALSE)
+```
+This output will be used to perform genomic prediction in `MSU_genom_pred.Rmd`.
+
+# Explore genetic structure
+
+Quickly explore genetic structure
+```{r explo_structure}
+## plot genomic relationship matrix
+superheat::superheat(GRM,
+                     pretty.order.rows = TRUE, pretty.order.cols = TRUE,
+                     #heat.pal = paletteer::paletteer_d("ggthemes::Classic Red-White-Green Light", 100),
+                     grid.hline.col = "white", grid.vline.col = "white",
+                     title = paste0("Genomic relationship matrix for ",ninds," individuals"))
+
+
+## do a PCA for exploring genetic structure
+res.pca <- ade4::dudi.pca(df=GRM, nf=2, scannf = FALSE)
+
+## color based on genotype information
+df.col <- geno.info[match(rownames(GRM),geno.info$GID),]
+table(df.col$COHORT)
+setdiff(rownames(GRM), geno.info$GID)
+df.col$col <- as.character(forcats::fct_lump_n(as.character(df.col$COHORT), n=6, other_level = "Other"))
+table(df.col$col)
+fviz_pca_ind(res.pca,geom="point",addEllipses = FALSE, col.ind="white")+
+  #geom_point()+
+  geom_point(aes(color=df.col$col), size=2, alpha=0.8)+
+  paletteer::scale_color_paletteer_d("awtools::mpalette",na.value="grey",name="Cohort")+
+  #scale_color_manual(values=c("springgreen3","forestgreen","#E69F00", "#56B4E9"), name="Cohort")+
+  guides(color=guide_legend(override.aes=list(size=5, alpha=1)))+
+  theme_bw(base_size=13)+
+  ggtitle("Genomic PCA MSU") + theme(legend.position="bottom")+
+  geom_label_repel(data=res.pca$li[checks,],mapping=aes(x=Axis1, y=Axis2, label=checks), min.segment.length = 0)
+ggsave(here("output","figures",paste0(pop_code,"_geno-PCA_cohort.png")))
+```
+
+
+
+More plots for exploring genetic structure are made in `explore_geno_structure.Rmd`.
+
+# Appendix
+
+```{r info}
+t1 <- proc.time(); t1 - t0
+print(sessionInfo(), locale=FALSE)
+```
+
+
