@@ -13,3 +13,4 @@ docs
 *.gitkeep
 *.vcf.gz
 *.vcf
+*.log
