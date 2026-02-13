@@ -93,6 +93,7 @@ for(tri in trials_predictathon[2:length(trials_predictathon)]){
 
 # Combine GRM matrices for each program
 
+
 ```{r}
 tri=trials_predictathon[8] ## works for 7
 for(tri in trials_predictathon){
@@ -104,6 +105,10 @@ for(tri in trials_predictathon){
   p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_genotypes_curated_numeric.rds")
   genoFoc <- readRDS(p2f)
   grmList[[1]] <- rrBLUP::A.mat(genoFoc-1)
+  ## export focal GRM
+  p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_focalAccessions_GRM.rds")
+  saveRDS(grmList[[1]], file=p2f)
+  
   ## Step 2: load the non focal GRM matrices
   files <- list.files(here("data","genotypic",tri,"nonFocal"))
   ## keep only the GRM files
@@ -115,25 +120,35 @@ for(tri in trials_predictathon){
   }))
   genoNames <- map(grmList,rownames)
   ap(genoNames)
-  ggVennDiagram::ggVennDiagram(genoNames, label_alpha = 0, label_size = 4) 
   
-  var_indices <- list()
-  for(i in seq_along(grmList)){
-    var_indices[[i]] <- match(rownames(grmList[[i]]), unique(unlist(genoNames)))-1
+  ## if same genotypes, skip
+  if(length(genoNames) > 1){
+    ggVennDiagram::ggVennDiagram(genoNames, label_alpha = 0, label_size = 4) 
+    if(all(genoNames[[1]] %in% genoNames[[2]]) & all(genoNames[[2]] %in% genoNames[[1]])){
+      genoNames[[2]] <- NULL
+      next
+    } else {
+      
+      ## combine genomic relationship matrices
+      var_indices <- list()
+      for(i in seq_along(grmList)){
+        var_indices[[i]] <- match(rownames(grmList[[i]]), unique(unlist(genoNames)))-1
+      }
+      
+      # combine GRM matrices
+      comb_grm <- covariance_combiner(
+        partial_covs=grmList,
+        var_indices=var_indices,
+        degrees_freedom=rep(100, length(grmList)),
+        calc_sampling_cov = FALSE
+      )
+      dim(comb_grm$psi)
+      grm_combined <- comb_grm$psi
+      ## export combined GRM
+      p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
+      saveRDS(grm_combined, file=p2f)
+    }
   }
-  
-  # combine GRM matrices
-  comb_grm <- covariance_combiner(
-    partial_covs=grmList,
-    var_indices=var_indices,
-    degrees_freedom=rep(100, length(grmList)),
-    calc_sampling_cov = FALSE
-  )
-  dim(comb_grm$psi)
-  grm_combined <- comb_grm$psi
-  ## export combined GRM
-  p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
-  saveRDS(grm_combined, file=p2f)
 }
 ```
 
