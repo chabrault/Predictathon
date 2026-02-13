@@ -23,7 +23,7 @@ suppressPackageStartupMessages(library(data.table)) # fread read table
 TODO: need to move this script to analysis folder
 
 ```{r current dir}
-here::i_am("data/phenotypic_data.Rmd")
+here::i_am("analysis/phenotypic_data.Rmd")
 source(here("code","useful_functions.R"))
 ```
 
