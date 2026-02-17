@@ -26,6 +26,7 @@ suppressPackageStartupMessages(library(DT)) # print table
 suppressPackageStartupMessages(library(ggplot2)) # plot
 suppressPackageStartupMessages(library(vcfR)) # load vcf
 suppressPackageStartupMessages(library(progress)) # progress bar
+suppressPackageStartupMessages(library(janitor))
 
 ```
 
@@ -92,6 +93,18 @@ all_trials_focal    <- all_trials |> dplyr::filter(isFocal)
 all_trials_nonfocal <- all_trials |> dplyr::filter(!isFocal)
 
 ```
+#Helper clean name
+```{r}
+safe_filename <- function(x) {
+  x <- basename(x)                      # in case the API returns a path
+  x <- gsub("[<>:\"/\\\\|?*]", "_", x)  # Windows-illegal chars -> underscore
+  x <- gsub("\\s+", "_", x)             # spaces -> underscore (optional)
+  x
+}
+
+```
+
+
 #Download WSU non-focal genotypic data
 ```{r}
 
@@ -162,18 +175,22 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 # download loop (skip if already exists)
 wsu_dl <- wsu_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-for(i in 1:nrow(wsu_dl)){
+for(i in seq_len(nrow(wsu_dl))){
   trial_id   <- wsu_dl$focal_trial[i]
   prot_id    <- wsu_dl$best_protocol_id[i]
   project_id <- wsu_dl$best_project_id[i]
   file_name  <- wsu_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   wsu_dl$out_file[i] <- out_file
@@ -183,7 +200,7 @@ for(i in 1:nrow(wsu_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,   # keep original for API
       verbose = FALSE
     )
   }
@@ -191,13 +208,14 @@ for(i in 1:nrow(wsu_dl)){
   wsu_dl$downloaded[i] <- file.exists(out_file)
 }
 
-# summary + manifest
 sum(wsu_dl$downloaded)
+
 manifest_path <- file.path(out_dir, "manifest_wsu_nonfocal.csv")
 write.csv(wsu_dl, manifest_path, row.names = FALSE)
 
 manifest_path
 file.exists(manifest_path)
+
 
 
 ```
@@ -275,12 +293,16 @@ for(i in 1:nrow(umn_dl)){
   project_id <- umn_dl$best_project_id[i]
   file_name  <- umn_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   umn_dl$out_file[i] <- out_file
@@ -290,13 +312,14 @@ for(i in 1:nrow(umn_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,     # IMPORTANT: keep original here for the API call
       verbose = FALSE
     )
   }
 
   umn_dl$downloaded[i] <- file.exists(out_file)
 }
+
 
 sum(umn_dl$downloaded)
 
@@ -373,18 +396,22 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 sdsu_dl <- sdsu_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-for(i in 1:nrow(sdsu_dl)){
+for(i in seq_len(nrow(sdsu_dl))){
   trial_id   <- sdsu_dl$focal_trial[i]
   prot_id    <- sdsu_dl$best_protocol_id[i]
   project_id <- sdsu_dl$best_project_id[i]
   file_name  <- sdsu_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   sdsu_dl$out_file[i] <- out_file
@@ -394,7 +421,7 @@ for(i in 1:nrow(sdsu_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,   # keep original for API call
       verbose = FALSE
     )
   }
@@ -409,7 +436,6 @@ write.csv(sdsu_dl, manifest_path, row.names = FALSE)
 
 manifest_path
 file.exists(manifest_path)
-
 
 
 ```
@@ -477,18 +503,22 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 tamu_dl <- tamu_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-for(i in 1:nrow(tamu_dl)){
+for(i in seq_len(nrow(tamu_dl))){
   trial_id   <- tamu_dl$focal_trial[i]
   prot_id    <- tamu_dl$best_protocol_id[i]
   project_id <- tamu_dl$best_project_id[i]
   file_name  <- tamu_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   tamu_dl$out_file[i] <- out_file
@@ -498,7 +528,7 @@ for(i in 1:nrow(tamu_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,   # keep original for the API call
       verbose = FALSE
     )
   }
@@ -688,18 +718,22 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 uw_dl <- uw_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-for(i in 1:nrow(uw_dl)){
+for(i in seq_len(nrow(uw_dl))){
   trial_id   <- uw_dl$focal_trial[i]
   prot_id    <- uw_dl$best_protocol_id[i]
   project_id <- uw_dl$best_project_id[i]
   file_name  <- uw_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   uw_dl$out_file[i] <- out_file
@@ -709,7 +743,7 @@ for(i in 1:nrow(uw_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,  # keep original for API call
       verbose = FALSE
     )
   }
@@ -744,7 +778,7 @@ msu <- msu |>
     vcf_file_name = NA_character_
   )
 
-for(i in 1:nrow(msu)){
+for(i in seq_len(nrow(msu))){
   tri_id <- msu$focal_trial[i]
 
   genos <- getGermplasmFromTrialVec(study_id_vec = tri_id, db)
@@ -793,18 +827,22 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 msu_dl <- msu_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-for(i in 1:nrow(msu_dl)){
+for(i in seq_len(nrow(msu_dl))){
   trial_id   <- msu_dl$focal_trial[i]
   prot_id    <- msu_dl$best_protocol_id[i]
   project_id <- msu_dl$best_project_id[i]
   file_name  <- msu_dl$vcf_file_name[i]
 
+  file_name_clean <- safe_filename(file_name)
+
   out_file <- file.path(
     out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
+    paste0(
+      "trial_", trial_id,
+      "_prot_", prot_id,
+      "_proj_", project_id,
+      "_", file_name_clean
+    )
   )
 
   msu_dl$out_file[i] <- out_file
@@ -814,7 +852,7 @@ for(i in 1:nrow(msu_dl)){
       output = out_file,
       genotyping_protocol_id = prot_id,
       genotyping_project_id  = project_id,
-      file_name = file_name,
+      file_name = file_name,  # keep original for API call
       verbose = FALSE
     )
   }
@@ -904,39 +942,49 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 uiuc_dl <- uiuc_ready |> dplyr::mutate(out_file = NA_character_, downloaded = FALSE)
 
-pb <- txtProgressBar(min = 1, max = nrow(uiuc_dl), style = 3)
+if(nrow(uiuc_dl) == 0){
+  message("No downloadable UIUC non-focal trials found.")
+} else {
 
-for(i in 1:nrow(uiuc_dl)){
-  setTxtProgressBar(pb, i)
+  pb <- txtProgressBar(min = 1, max = nrow(uiuc_dl), style = 3)
 
-  trial_id   <- uiuc_dl$focal_trial[i]
-  prot_id    <- uiuc_dl$best_protocol_id[i]
-  project_id <- uiuc_dl$best_project_id[i]
-  file_name  <- uiuc_dl$vcf_file_name[i]
+  for(i in seq_len(nrow(uiuc_dl))){
+    setTxtProgressBar(pb, i)
 
-  out_file <- file.path(
-    out_dir,
-    paste0("trial_", trial_id,
-           "_prot_", prot_id,
-           "_proj_", project_id,
-           "_", file_name, ".vcf.gz")
-  )
+    trial_id   <- uiuc_dl$focal_trial[i]
+    prot_id    <- uiuc_dl$best_protocol_id[i]
+    project_id <- uiuc_dl$best_project_id[i]
+    file_name  <- uiuc_dl$vcf_file_name[i]
 
-  uiuc_dl$out_file[i] <- out_file
+    file_name_clean <- safe_filename(file_name)
 
-  if(!file.exists(out_file)){
-    wheat$vcf_archived(
-      output = out_file,
-      genotyping_protocol_id = prot_id,
-      genotyping_project_id  = project_id,
-      file_name = file_name,
-      verbose = FALSE
+    out_file <- file.path(
+      out_dir,
+      paste0(
+        "trial_", trial_id,
+        "_prot_", prot_id,
+        "_proj_", project_id,
+        "_", file_name_clean
+      )
     )
+
+    uiuc_dl$out_file[i] <- out_file
+
+    if(!file.exists(out_file)){
+      wheat$vcf_archived(
+        output = out_file,
+        genotyping_protocol_id = prot_id,
+        genotyping_project_id  = project_id,
+        file_name = file_name,  # keep original for API call
+        verbose = FALSE
+      )
+    }
+
+    uiuc_dl$downloaded[i] <- file.exists(out_file)
   }
 
-  uiuc_dl$downloaded[i] <- file.exists(out_file)
+  close(pb)
 }
-close(pb)
 
 sum(uiuc_dl$downloaded)
 
@@ -952,71 +1000,70 @@ file.exists(manifest_path)
 #Download Kansas non-focal genotypic data
 
 ```{r}
-# =========================
-# 1) DOWNLOAD KANSAS VCFs
-# =========================
 
-suppressPackageStartupMessages({
-  library(here)
-  library(dplyr)
-})
+focal_tri <- "TCAP_2025_MANKS"
+prog_slug <- "usda_ars_kansas"
+protocol_ids <- c(289, 297)  # Allegro V1 and Allegro V2 (example)
 
-# ---- Inputs ----
-focal_trial_folder <- "TCAP_2025_MANKS"
-program_folder     <- "usda_ars_kansas"
-protocol_ids       <- c(289, 297)  # Allegro V1 and Allegro V2
+# Output folder (same structure as your other programs)
+out_dir <- here("data", "genotypic", focal_tri, "nonFocal", prog_slug, "raw_archived_vcfs")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-# ---- Output folder ----
-raw_dir <- here("data", "genotypic", focal_trial_folder, "nonFocal",
-                program_folder, "raw_archived_vcfs")
-dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
+# ---- 1) Build a download table (like *_ready / *_dl) ----
+kansas_info <- lapply(protocol_ids, function(pid){
+  wheat$vcf_archived_list(genotyping_protocol_id = pid, verbose = FALSE) |>
+    as.data.frame() |>
+    dplyr::mutate(protocol_id = pid)
+}) |>
+  dplyr::bind_rows()
 
-# ---- Function: download all archived VCFs for ONE protocol ----
-download_archived_by_protocol <- function(protocol_id, raw_dir, wheat_conn){
+stopifnot(nrow(kansas_info) > 0)
 
-  info <- wheat_conn$vcf_archived_list(
-    genotyping_protocol_id = protocol_id,
-    verbose = FALSE
-  ) |> as.data.frame()
-
-  stopifnot(nrow(info) > 0)
-
-  info$out_file <- file.path(
-    raw_dir,
-    paste0("prot_", protocol_id, "_proj_", info$project_id, "_", info$file_name, ".vcf.gz")
+kansas_dl <- kansas_info |>
+  dplyr::mutate(
+    file_name_clean = vapply(file_name, safe_filename, FUN.VALUE = character(1)),
+    out_file = file.path(
+      out_dir,
+      paste0(
+        "prot_", protocol_id,
+        "_proj_", project_id,
+        "_", file_name_clean
+      )
+    ),
+    downloaded = FALSE
   )
 
-  for(i in seq_len(nrow(info))){
-    if(!file.exists(info$out_file[i])){
-      message("Downloading prot=", protocol_id, " | ", info$project_name[i])
-      wheat_conn$vcf_archived(
-        output = info$out_file[i],
-        genotyping_protocol_id = protocol_id,
-        genotyping_project_id  = info$project_id[i],
-        file_name              = info$file_name[i],
-        verbose = FALSE
-      )
-    } else {
-      message("Exists: ", basename(info$out_file[i]))
-    }
+# ---- 2) Download loop (same idea as your others) ----
+for(i in seq_len(nrow(kansas_dl))){
+  prot_id    <- kansas_dl$protocol_id[i]
+  project_id <- kansas_dl$project_id[i]
+  file_name  <- kansas_dl$file_name[i]
+  out_file   <- kansas_dl$out_file[i]
+
+  if(!file.exists(out_file)){
+    wheat$vcf_archived(
+      output = out_file,
+      genotyping_protocol_id = prot_id,
+      genotyping_project_id  = project_id,
+      file_name              = file_name,  # keep original for API call
+      verbose = FALSE
+    )
   }
 
-  info$file_size <- file.info(info$out_file)$size
-  info
+  kansas_dl$downloaded[i] <- file.exists(out_file)
 }
 
-# ---- Run downloads ----
-all_info <- lapply(protocol_ids, download_archived_by_protocol,
-                   raw_dir = raw_dir, wheat_conn = wheat) |>
-  bind_rows()
+# Optional: file size
+kansas_dl$file_size <- ifelse(kansas_dl$downloaded, file.info(kansas_dl$out_file)$size, NA_real_)
 
-# ---- Save manifest ----
-manifest_path <- file.path(raw_dir, "manifest_kansas_archived_vcfs.csv")
-write.csv(all_info, manifest_path, row.names = FALSE)
+# ---- 3) Manifest (same pattern as your other programs) ----
+sum(kansas_dl$downloaded)
+
+manifest_path <- file.path(out_dir, "manifest_kansas_archived_vcfs.csv")
+write.csv(kansas_dl, manifest_path, row.names = FALSE)
 
 manifest_path
-all_info |> select(protocol_id, project_id, project_name, file_name, file_size, out_file)
-
+file.exists(manifest_path)
 
 ```
 
