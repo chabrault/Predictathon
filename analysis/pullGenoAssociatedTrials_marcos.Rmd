@@ -1064,7 +1064,6 @@ write.csv(kansas_dl, manifest_path, row.names = FALSE)
 
 manifest_path
 file.exists(manifest_path)
-
 ```
 
 
