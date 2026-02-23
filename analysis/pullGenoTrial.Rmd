@@ -640,7 +640,7 @@ stopifnot(length(prot_name) == 1)
 
 # Filter the correct project (exact match is OK since vcf_list has one row)
 row <- vcf_list |>
-  dplyr::filter(project_name == "UIUC_2024_GBS")
+  dplyr::filter(project_name == "UIUC_2024_GBS_V2")
 stopifnot(nrow(row) == 1)
 
 project_id   <- row$project_id
@@ -680,7 +680,6 @@ manifest_path <- here("data", "genotypic", tri, "manifest.csv")
 write.csv(manifest, manifest_path, row.names = FALSE)
 
 manifest
-
 ```
 
 
@@ -912,7 +911,7 @@ stopifnot(length(prot_name) == 1)
 my_accessions <- geno_number[[tri]]
 resp <- db$filter_geno_projects(my_accessions)
 row <- vcf_list |>
-  dplyr::filter(project_id == 10657) |> 
+  dplyr::filter(project_id == 14509) |> #10657) |> 
   head(1)
 stopifnot(nrow(row) == 1)
 
