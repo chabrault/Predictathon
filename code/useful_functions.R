@@ -1,4 +1,23 @@
 
+
+#' Get cross-validation folds
+#'
+#' @param index length of total set to select from, numeric vector of length 1
+#' @param nb.folds number of fold to divide, default is 5
+#' @param seed (optional) for reproducibility, set a seed.
+#'
+#' @return list of testing set indexes for each fold.
+
+getFolds <- function(index, nb.folds=5, seed=NULL){
+  stopifnot(nb.folds <= index,
+            ifelse(! is.null(seed), is.numeric(seed), TRUE))
+  if(!is.null(seed)){set.seed(seed, kind="Mersenne-Twister")}
+  split <- split(sample(1:index), rep(1:nb.folds, length=index))
+  names(split) <- paste0("Fold", seq(1:nb.folds))
+  return(split)
+}
+
+
 #' Format and curate vcf file
 #'
 #' @param vcf.p2f path to the vcf file

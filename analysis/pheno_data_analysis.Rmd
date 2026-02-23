@@ -17,36 +17,25 @@ knitr::opts_chunk$set(echo = TRUE,
 suppressPackageStartupMessages(library(here)) # root directory
 suppressPackageStartupMessages(library(data.table)) # load data
 suppressPackageStartupMessages(library(apercu)) # ap
-suppressPackageStartupMessages(library(rrBLUP)) # genomic selection
 suppressPackageStartupMessages(library(dplyr)) # formatting
 suppressPackageStartupMessages(library(ggplot2)) # plot
 suppressPackageStartupMessages(library(paletteer)) # plot palette
 suppressPackageStartupMessages(library(janitor)) # formating
-suppressPackageStartupMessages(library(ggvenn)) # Venn diagram
-suppressPackageStartupMessages(library(glmnet)) # LASSO
-suppressPackageStartupMessages(library(doParallel)) # for parallelization
-suppressPackageStartupMessages(library(foreach)) # for parallelization
-suppressPackageStartupMessages(library(snow)) # for creating cluster
-suppressPackageStartupMessages(library(doSNOW)) # for creating cluster
-suppressPackageStartupMessages(library(BGLR)) # Bayes
-suppressPackageStartupMessages(library(caret)) # method cross val
 suppressPackageStartupMessages(library(purrr)) # list handling
 suppressPackageStartupMessages(library(bigstatsr)) # ggplot theme
 suppressPackageStartupMessages(library(ggbeeswarm)) # ggplot geom_quasirandom
-
+suppressPackageStartupMessages(library(gtsummary)) # print summary table
+suppressPackageStartupMessages(library(lme4)) # print summary table
 #devtools::install_github("chabrault/HRSWGS")
 
 #suppressPackageStartupMessages(library(HRSWGS)) ## custom functions
-
-nb.cores <- 10
 ```
 
 
 # Set up root directory
 
 ```{r current dir}
-here::i_am("analysis/genom_pred.Rmd")
-source(here("code","useful_functions.R")) # getFolds function
+here::i_am("analysis/pheno_data_analysis.Rmd")
 ```
 
 
@@ -56,31 +45,26 @@ This R chunk is used to assess how much time it takes to execute the R code in t
 t0 <- proc.time()
 ```
 
-```{r}
-trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
-                         "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
-                         "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
-```
 
 # Load data
 
 ## Genomic data
 
-```{r load_geno}
-# p2fs <- here("data","genotypic", trials_predictathon,"clean",
-#              paste0(trials_predictathon,"_focalAccessions_GRM.rds"))
-p2fs <- here("data","genotypic", trials_predictathon,"clean",
-             paste0(trials_predictathon,"_combined_GRM.rds"))
-file.mtime(p2fs)
-## for missing ones, use the focal accessions GRM
-missing <- which(!file.exists(p2fs))
-if(length(missing)>0){
-  p2fs[missing] <- here("data","genotypic", trials_predictathon[missing],"clean",
-                        paste0(trials_predictathon[missing],"_focalAccessions_GRM.rds"))
-}
+Load the cleaned and imputed genomic data, filtered for minor allele frequency at 5%.
+File generated in `combine_format_vcf`.
 
-genoList <- lapply(p2fs, readRDS)
-names(genoList) <- trials_predictathon
+```{r load_geno}
+
+p2f.geno <- here("data","genotypic", "YT_Urb_25","clean","YT_Urb_25_genotypes_curated_numeric.rds")
+file.mtime(p2f.geno)
+geno <- readRDS(p2f.geno)
+dim(geno)
+ap(geno)
+geno.init <- geno
+geno <- janitor::remove_constant(geno)
+geno[,2:ncol(geno)] <- scale(geno[,2:ncol(geno)], center=T, scale=T)
+ap(geno)
+gid.geno <- rownames(geno)
 ```
 
 
@@ -88,180 +72,289 @@ names(genoList) <- trials_predictathon
 ## Phenotypic data
 
 
+The phenotypic data is the curated data for the SDSU breeding program. We extracted the BLUPs in the script `format_pheno_statgenSTA.Rmd`.
 
 ```{r load_pheno_trials}
 p2f <- here("data","phenotypic","allAccessions_yield_raw.csv")
-file.mtime(p2f)
-pheno_init <- fread(p2f)
-dim(pheno_init)
-head(pheno_init)
-str(pheno_init)
-pheno <- pheno_init |> 
-  rename(GID=germplasmName, YLD=value, PROG=focal_trial, LOC=location, YEAR=year) |> 
-  mutate(ENV=paste0(LOC,"_",YEAR)) |>
-  select(GID, PROG, LOC, YEAR, ENV, YLD)
-```
 
-# Cross validation by program (CV0)
+pheno <- fread(p2f)
+dim(pheno)
+head(pheno)
+#(ngeno <- length(intersect(pheno$germplasmName,rownames(geno))))
+#pheno.geno <- pheno |> filter(germplasmName %in% rownames(geno))
+#setdiff(pheno$GID, rownames(geno))
+str(pheno)
 
-Predict unknown trial with known genotypes. 
-Steps:
+pheno$germplasmName = as.factor(pheno$germplasmName)
+pheno$year = as.factor(pheno$year)
+pheno$location = as.factor(pheno$location)
 
-- Subset the lines both genotyped and phenotyped for each target trial
-- Predict each environment in turn using the other trials as training set.
+## unique genotype and environments
+print(length(unique(pheno$germplasmName)))
+print(length(unique(pheno$studyDbId)))
 
-```{r}
-nfolds <- 5
-nreps <- 2
-```
+# any NAs in yield 
+colSums(is.na(pheno))
+
+## I extracted only three columns for data exploration
+# Keep only what we need, with concise names
+ph <- as.data.table(pheno)[, .(
+  gid  = germplasmName,
+  env  = studyDbId,
+  value
+)]
+ph[, value := as.numeric(value)]
+
+# experiment/env specific stats
+env_stats <- ph[, .(
+  n    = .N,
+  mean = mean(value, na.rm = TRUE),
+  sd   = sd(value,   na.rm = TRUE),
+  max  = max(value,  na.rm = TRUE),   
+  min = min(value,  na.rm = TRUE)  
+), by = env][order(env)]
+
+print(env_stats)
+
+
+p1 <- ggplot(env_stats, aes(mean)) +
+  geom_histogram(bins = 40, fill = "lightgray", color = "black") +
+  labs(title = "Distribution of environment means",
+       x = "Env mean (yield)", y = "Count") +
+  theme_bw(base_size = 13)
+
+p1
+
+
+
+p2 <- ggplot(env_stats, aes(mean, sd, color = n)) +
+  geom_point(alpha = 0.8, size = 2) +
+  scale_color_viridis_c() +
+  labs(title = "Environment spread vs level",
+       x = "Env mean", y = "Env SD", color = "n (plots)") +
+  theme_bw(base_size = 13)
+p2
+
+
+### adding CV and Se t =o the table
+setDT(env_stats)
+# Derived metrics
+env_stats[, `:=`(
+  cv   = 100 * sd / mean,                 # coefficient of variation (%)
+  se   = sd / sqrt(pmax(n, 1))           # standard error of env mean
+)]
+
+
+# flag the env based on cv, se, or less number of plots  (we can adjust the limits)
+env_stats[, flag := fifelse(n < 15, "low_n",
+                      fifelse(cv > 30, "high_cv",
+                      fifelse(sd == 0, "zero_sd", NA_character_)))]
+
+env_stats[, n_flags := (!is.na(flag)) + 0L]
+
+print(env_stats)
+fwrite(env_stats, here::here("output", "rawData_summaryByenv.csv"))
+# flag any env with less than 15 entries or high Cv
+suspected_errors <- env_stats[
+  n < 15 | cv > 30 | sd == 0
+][order(-n_flags, -cv)]
+
+fwrite(suspected_errors, here::here("output", "env_suspects_review.csv"))
+print(suspected_errors)
+
+
+## Connectivity
+#setDT(ph)
+#ph_small <- unique(ph[, .(env = factor(env), gid = factor(gid))])  
+
+#env_ix <- as.integer(ph_small$env)
+#gid_ix <- as.integer(ph_small$gid)
+#n_env  <- nlevels(ph_small$env)
+#n_gid  <- nlevels(ph_small$gid)
+#M <- sparseMatrix(i = env_ix, j = gid_ix, x = 1, dims = c(n_env, n_gid),
+#                  dimnames = list(levels(ph_small$env), levels(ph_small$gid)))
+
+#C_counts <- M %*% t(M)                    
+#C_counts <- as.matrix(C_counts)
+#C_counts
+
+
+
+## Based on data inspection, remove the suspect environments form the 'pheno' file
+
+## Note: I just removed the environments as a whole for time being. However, we can make corrects in the raw data or remove only outlier entries.
+
+bad_env = (suspected_errors$env)
+pheno_suspect_removed <- pheno[ !studyDbId %in% bad_env ]
+
+## for each program, what is the status of years and location
+prog_counts <- pheno_suspect_removed[, .(
+  n_obs       = .N,
+  n_genotypes = uniqueN(germplasmName),
+  n_years     = uniqueN(year[!is.na(year)]),
+  n_locations = uniqueN(location[!is.na(location)])
+), by = focal_trial][order(focal_trial)]
+prog_counts
+
+
+year_loc <- pheno_suspect_removed[, .N, by = .(focal_trial, year, location)][order(focal_trial, year, location)]
+year_loc
 
 
 
 
-```{r}
-tri=trials_predictathon[1]
+##########################################################################################
+### get BLUEs for each program
 
-df.res <- expand.grid(trial=trials_predictathon,  corP=NA,
-                      nb.genos=NA, nb.envs=NA)
+## Note: some program have only one location and some have multiple locations over years
+## Hence, different models from two groups
 
 
-for(tri in trials_predictathon[3:length(trials_predictathon)]){
-  write(paste0("Processing trial: ", tri,"\n"), stdout())
-  
-  ## subset GID with geno and pheno data
-  gid.geno <- rownames(genoList[[tri]])
-  gid <- intersect(gid.geno, pheno$GID)
-  length(gid)
-  if(length(gid) == 0){
-    write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-    
-  }else {
-    geno_sub <- genoList[[tri]][gid,gid]
-    ## TODO subset phenotypes to the program to predict
-    pheno_sub <- pheno |> filter(GID %in% gid)
-    envs <- unique(pheno_sub$ENV)
-    df_pred_e <- data.frame()
-    for(e in envs){
-      
-      pheno_train <- pheno_sub |> 
-        mutate(YLD=ifelse(ENV %in% e, NA, YLD))
-      ## fit GBLUP model
-      fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD", 
-                              K=geno_sub, fixed="ENV",
-                              n.core=nb.cores)
-      ## export predicted values
-      df_pred_e <- rbind(df_pred_e, 
-                         data.frame(ENV=e, GID=names(fit$pred), pred=c(fit$pred)))
-      
-    }
-    ## add observed values
-    df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
-    ## calculate correlation across environments
-    pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
-    idx <- which(df.res$trial == tri)
-    df.res$corP[idx] <- pa
-    
-    ## add training/validation set size of the last fold
-    df.res$nb.genos[idx] <- length(unique(pheno_train$GID))
+# programs with exactly ONE location 
+one_loc_programs <- c(
+  "Cornell University",
+  "South Dakota State University- Winter Wheat",
+  "University of Illinois",
+  "University of Minnesota"
+)
 
-    
-  }
+
+out_dir <- here("output", "BLUEs_by_program_oneLoc")
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+
+get_blues_oneLOC <- function(d) {
+  fit <- lmer(value ~ 0 + germplasmName + (1|year), data = d, REML = TRUE)
+  fe <- fixef(fit)                 
+  V  <- vcov(fit)                  
+  se <- sqrt(diag(V))
+
+  # to data.table
+  blues <- data.table(
+    germplasmName = sub("^germplasmName", "", names(fe)),
+    BLUE          = as.numeric(fe),
+    SE            = as.numeric(se)
+  )
+
+  n_tab <- d[, .N, by = germplasmName]
+  setnames(n_tab, "N", "n")
+
+  merge(blues, n_tab, by = "germplasmName", all.x = TRUE)
 }
 
-```
+# loop over programs
+for (pg in one_loc_programs) {
+  cat("analyzing:", pg, "\n")
+  dpg <- pheno_suspect_removed[focal_trial == pg & !is.na(value)]
+  dpg <- droplevels(dpg)
 
+  res <- get_blues_oneLOC(dpg)
 
-```{r}
-tri <- trials_predictathon[2]
-gid.geno <- rownames(genoList[[tri]])
-gid <- intersect(gid.geno, pheno$GID)
-length(gid)
-geno_sub <- genoList[[tri]][gid,gid]
-pheno_sub <- pheno |> filter(GID %in% gid)
-pheno_avg <- pheno_sub %>% group_by(GID) %>% summarise(YLD=mean(YLD, na.rm=T))
-
-```
-
-## Old 
-
-```{r}
-tri=trials_predictathon[1]
-
-df.res <- expand.grid(trial=trials_predictathon, rep=1:nreps, corP=NA,
-                      nb.genos.TS=NA, nb.genos.VS=NA)
-
-
-for(tri in trials_predictathon[3:length(trials_predictathon)]){
-  write(paste0("Processing trial: ", tri,"\n"), stdout())
-  
-  ## subset GID with geno and pheno data
-  gid.geno <- rownames(genoList[[tri]])
-  gid <- intersect(gid.geno, pheno$GID)
-  length(gid)
-  if(length(gid) == 0){
-    write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-    
-  }else {
-    geno_sub <- genoList[[tri]][gid,gid]
-    ## TODO subset phenotypes to the program to predict
-    pheno_sub <- pheno |> filter(GID %in% gid)
-    ## add mean pheno across environments for validation
-    pheno_avg <- pheno_sub %>% group_by(GID) %>% 
-      summarise(YLD=mean(YLD, na.rm=T))
-    
-    for(r in 1:nreps){
-      write(paste0("  Rep: ", r,"\n"), stdout())
-      ## determine testing set among gid genotypes
-      folds <- getFolds(index=length(gid), nb.folds=nfolds,seed=5656+r)
-      pred_f <- c()
-      for(f in 1:nfolds){
-        test_gid <- gid[folds[[f]]]
-        train_gid <- setdiff(gid, test_gid)
-        pheno_train <- pheno_sub |> mutate(YLD=ifelse(GID %in% test_gid, NA, YLD))
-        ## fit GBLUP model
-        fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD", 
-                                K=geno_sub, fixed="ENV",
-                                n.core=nb.cores)
-        ## export predicted values
-        pred_f <- c(pred_f, fit$pred[test_gid])
-        
-      }
-      ## calculate correlation across folds
-      pa <- cor(pheno_avg$YLD, pred_f[match(pheno_avg$GID, names(pred_f))], use="complete.obs")
-      idx <- which(df.res$trial == tri & df.res$rep == r)
-      df.res$corP[idx] <- pa
-      
-      ## add training/validation set size of the last fold
-      df.res$nb.genos.TS[idx] <- length(train_gid)
-      df.res$nb.genos.VS[idx] <- length(test_gid)
-      
-    }
-  }
+ 
+fwrite(res, here("output","BLUEs_by_program_oneLoc",
+                 paste0(pg, "_BLUEs.csv")))
 }
+
+
+#### Programs with more than one locations
+multi_loc_programs <- c(
+  "Michigan State University",
+  "TAMU",
+  "USDA-ARS Kansas",
+  "University of Wisconsin",
+  "Washington State University"
+)
+
+out_dir <- here("output", "BLUEs_by_program_multiLoc")
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+get_blues_multiloc <- function(d) {
+  fit <- lmer(value ~ 0 + germplasmName + (1|year) + (1|location), data = d, REML = TRUE)   # genotype fixed, year & location random; NO intercept
+
+  fe <- fixef(fit)                 
+  V  <- vcov(fit)
+  se <- sqrt(diag(V))
+
+  blues <- data.table(
+    germplasmName = sub("^germplasmName", "", names(fe)),
+    BLUE          = as.numeric(fe),
+    SE            = as.numeric(se)
+  )
+
+  n_tab <- d[, .N, by = germplasmName][, .(germplasmName, n = N)]
+  merge(blues, n_tab, by = "germplasmName", all.x = TRUE)
+}
+
+# loop over programs
+for (pg in multi_loc_programs) {
+  cat("analyzing:", pg, "\n")
+  dpg <- pheno_suspect_removed[focal_trial == pg & !is.na(value)]
+  dpg <- droplevels(dpg)
+
+  res <- get_blues_multiloc(dpg)
+
+fwrite(res, here("output","BLUEs_by_program_multiLoc",
+                 paste0(pg, "_BLUEs.csv")))}
+
+
+
 ```
 
+<!-- Add FHB traits, analyzed in `format_pheno_FHB.Rmd`. -->
 
-```{r}
-tri <- trials_predictathon[2]
-gid.geno <- rownames(genoList[[tri]])
-gid <- intersect(gid.geno, pheno$GID)
-length(gid)
-geno_sub <- genoList[[tri]][gid,gid]
-pheno_sub <- pheno |> filter(GID %in% gid)
-pheno_avg <- pheno_sub %>% group_by(GID) %>% summarise(YLD=mean(YLD, na.rm=T))
+<!-- ```{r} -->
+<!-- p2f <- here("data","phenotypic",paste0("FHBMTtrials_2018-2024_adjusted_pheno_", -->
+<!--                                        "5traits.tsv")) -->
+<!-- file.mtime(p2f) -->
+<!-- phenoFHB <- read.table(file=p2f, header=T, sep="\t") -->
+<!-- dim(phenoFHB) -->
+<!-- pheno <- pheno %>%  -->
+<!--   left_join(phenoFHB, by="GID") %>% -->
+<!--   select(GID, everything()) %>% -->
+<!--   relocate(GID) -->
+<!-- ``` -->
 
-```
+<!-- Export combined phenotypic data -->
+<!-- ```{r} -->
+<!-- p2f <- here("data","phenotypic", -->
+<!--             paste0(pop_code.trial,"-BLUPs_",c(ncol(pheno)-1),"traits.tsv")) -->
+<!-- write.table(pheno, file=p2f, sep="\t", quote=FALSE, row.names=FALSE) -->
+<!-- tools::md5sum(p2f) -->
+<!-- ``` -->
 
 
-```{r}
-fit <- rrBLUP::kin.blup(data=pheno_sub, geno="GID",pheno="YLD", 
-                        K=geno_sub, fixed="ENV",
-                        n.core=nb.cores)
-ap(fit$g)
-ap(fit$pred)
-cor(pheno_avg$YLD, fit$pred[match(pheno_avg$GID, names(fit$pred))], use="complete.obs")
-```
+<!-- # Load data -->
 
+<!-- ## Genomic data -->
+
+<!-- Load the cleaned and imputed genomic data, filtered for minor allele frequency at 5%. -->
+<!-- File generated in `combine_format_vcf`. -->
+
+<!-- ```{r load_geno} -->
+<!-- ninds.geno <- 1679 ; pop_code.geno <- "MSU2022-MSU2025-W3K" -->
+
+<!-- p2f.geno <- here("data","genotypic", "merged_3K", -->
+<!--                  paste0(pop_code.geno, "_genoMatrix_",ninds.geno,"inds.rds")) -->
+<!-- file.mtime(p2f.geno) -->
+<!-- geno <- readRDS(p2f.geno) -->
+<!-- dim(geno) -->
+<!-- geno.init <- geno -->
+<!-- geno <- janitor::remove_constant(geno) -->
+<!-- geno[,2:ncol(geno)] <- scale(geno[,2:ncol(geno)], center=T, scale=T) -->
+<!-- ap(geno) -->
+<!-- gid.geno <- rownames(geno) -->
+<!-- ``` -->
+
+
+
+<!-- ## Genotype information -->
+
+<!-- Genotype information was generated in `explore_format_pheno.Rmd`, and from the input of `combine_format_vcf.Rmd`. -->
+<!-- ```{r} -->
+<!-- geno.info <- fread(here("data","MSU2022-MSU2025-W3K_genotype_info.tsv"),data.table=F) -->
+<!-- head(geno.info) -->
+<!-- dim(geno.info) -->
+<!-- ``` -->
 
 
 <!-- # Genomic prediction -->

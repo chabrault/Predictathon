@@ -48,54 +48,54 @@ trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVRE
 # Convert vcf files to GRM matrices
 
 ```{r}
-tri=trials_predictathon[3]
-for(tri in trials_predictathon[2:length(trials_predictathon)]){
-  
-  write(paste0("Processing trial: ", tri), stdout())
-  files <- list.files(here("data","genotypic",tri,"nonFocal"))
-  files <- grep(files, pattern=".vcf.gz", value=TRUE)
-  files <- grep(files, pattern="_formatted|_imputed", value=TRUE, invert=TRUE)## keep only the unformatted vcf files
-  for(file in files){
-    
-    vcf.p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
-    
-    ## get filename without extension
-    file_noext <- gsub(pattern=".vcf.gz","",file)
-    p2f.export.vcf <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_formatted.vcf.gz")
-    ## use custom function from useful_functions.R
-    geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
-                              p2f.export.vcf=p2f.export.vcf,
-                              remove.chrUkn=FALSE,
-                              check.mrk.dups=TRUE,
-                              remove.nonPolyMrk=FALSE,
-                              tresh.heterozygous=NULL,
-                              check.geno.dups=TRUE,
-                              thresh.NA.ind=0.5,
-                              thresh.NA.mrk=0.5,
-                              format.names=FALSE,
-                              imputation="Beagle",
-                              p2f.beagle=here("code","beagle.27Feb25.75f.jar"),
-                              thresh.MAF=0.01,
-                              verbose=1)
-    
-    ## export numeric imputed geno file
-    p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
-    saveRDS(geno, file=p2f)
-    
-    ## calculate the genomic relationship matrix
-    grm <- rrBLUP::A.mat(geno-1)
-    ## export grm
-    p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
-    saveRDS(geno, file=p2f)
-  }
-}
+# tri=trials_predictathon[3]
+# for(tri in trials_predictathon[2:length(trials_predictathon)]){
+#   
+#   write(paste0("Processing trial: ", tri), stdout())
+#   files <- list.files(here("data","genotypic",tri,"nonFocal"))
+#   files <- grep(files, pattern=".vcf.gz", value=TRUE)
+#   files <- grep(files, pattern="_formatted|_imputed", value=TRUE, invert=TRUE)## keep only the unformatted vcf files
+#   for(file in files){
+#     
+#     vcf.p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
+#     
+#     ## get filename without extension
+#     file_noext <- gsub(pattern=".vcf.gz","",file)
+#     p2f.export.vcf <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_formatted.vcf.gz")
+#     ## use custom function from useful_functions.R
+#     geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
+#                               p2f.export.vcf=p2f.export.vcf,
+#                               remove.chrUkn=FALSE,
+#                               check.mrk.dups=TRUE,
+#                               remove.nonPolyMrk=FALSE,
+#                               tresh.heterozygous=NULL,
+#                               check.geno.dups=TRUE,
+#                               thresh.NA.ind=0.5,
+#                               thresh.NA.mrk=0.5,
+#                               format.names=FALSE,
+#                               imputation="Beagle",
+#                               p2f.beagle=here("code","beagle.27Feb25.75f.jar"),
+#                               thresh.MAF=0.01,
+#                               verbose=1)
+#     
+#     ## export numeric imputed geno file
+#     p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
+#     saveRDS(geno, file=p2f)
+#     
+#     ## calculate the genomic relationship matrix
+#     grm <- rrBLUP::A.mat(geno-1)
+#     ## export grm
+#     p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
+#     saveRDS(geno, file=p2f)
+#   }
+# }
 ```
 
 # Combine GRM matrices for each program
 
 
 ```{r}
-tri=trials_predictathon[8] ## works for 7
+tri=trials_predictathon[9] ## works for 7
 for(tri in trials_predictathon){
   
   write(paste0("Processing trial: ", tri), stdout())
