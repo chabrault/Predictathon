@@ -96,12 +96,13 @@ For non-focal accessions
 
 # Combine GRM matrices for each program
 
-
-```{r}
-pbm <- c("CornellMaster_2025_McGowan")
+For AWY1, same vcf files were downloaded twice, copy the focal_accessions GRM to the combined_GRM.
+For Cornell, two files were identical but completely disjoint from the focalAccessions. Copy the focalAccessions_GRM to the combined_GRM.
+```{r combine-grm}
+pbm <- c("CornellMaster_2025_McGowan", "AWY1_DVPWA_2024")
 for(tri in setdiff(target.tri, pbm)){
   p2f.export <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
-  if(!file.exists(p2f.export)){
+  #if(!file.exists(p2f.export)){
     
     write(paste0("Processing trial: ", tri), stdout())
     grmList <- list()
@@ -149,13 +150,14 @@ for(tri in setdiff(target.tri, pbm)){
         )
         dim(comb_grm$psi)
         grm_combined <- comb_grm$psi
+        rownames(grm_combined) <- colnames(grm_combined) <- unique(unlist(genoNames))
         ## export combined GRM
         p2f.export <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
         saveRDS(grm_combined, file=p2f.export)
       }
     }
   }
-}
+#}
 ```
 
 
