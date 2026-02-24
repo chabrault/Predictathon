@@ -58,11 +58,12 @@ for(tri in trials_predictathon){
   files <- grep(files, pattern=".vcf.gz", value=TRUE)
   files <- grep(files, pattern="_formatted|_imputed", value=TRUE, invert=TRUE)## keep only the unformatted vcf files
   for(file in files){
-
+    
     vcf.p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
 
     ## get filename without extension
     file_noext <- gsub(pattern=".vcf.gz","",file)
+    
     p2f.export.vcf <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_formatted.vcf.gz")
     ## use custom function from useful_functions.R
     geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
@@ -81,14 +82,14 @@ for(tri in trials_predictathon){
                               verbose=1)
 
     ## export numeric imputed geno file
-    p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
-    saveRDS(geno, file=p2f)
+    p2f.num <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
+    saveRDS(geno, file=p2f.num)
 
     ## calculate the genomic relationship matrix
     grm <- rrBLUP::A.mat(geno-1)
     ## export grm
-    p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
-    saveRDS(geno, file=p2f)
+    p2f.grm <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
+    saveRDS(grm, file=p2f.grm)
   }
 }
 ```
