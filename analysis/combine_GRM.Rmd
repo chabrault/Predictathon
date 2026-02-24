@@ -39,9 +39,9 @@ source(here("code","useful_functions.R"))
 
 
 ```{r}
-trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
-                         "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
-                         "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+target.tri <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
+                "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
+                "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
 ```
 
 
@@ -50,105 +50,109 @@ trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVRE
 For non-focal accessions
 
 ```{r}
-tri=trials_predictathon[9]
-for(tri in trials_predictathon){
-
-  write(paste0("Processing trial: ", tri), stdout())
-  files <- list.files(here("data","genotypic",tri,"nonFocal"))
-  files <- grep(files, pattern=".vcf.gz", value=TRUE)
-  files <- grep(files, pattern="_formatted|_imputed", value=TRUE, invert=TRUE)## keep only the unformatted vcf files
-  for(file in files){
-    
-    vcf.p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
-
-    ## get filename without extension
-    file_noext <- gsub(pattern=".vcf.gz","",file)
-    
-    p2f.export.vcf <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_formatted.vcf.gz")
-    ## use custom function from useful_functions.R
-    geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
-                              p2f.export.vcf=p2f.export.vcf,
-                              remove.chrUkn=FALSE,
-                              check.mrk.dups=TRUE,
-                              remove.nonPolyMrk=FALSE,
-                              tresh.heterozygous=NULL,
-                              check.geno.dups=TRUE,
-                              thresh.NA.ind=0.5,
-                              thresh.NA.mrk=0.5,
-                              format.names=FALSE,
-                              imputation="Beagle",
-                              p2f.beagle=here("code","beagle.27Feb25.75f.jar"),
-                              thresh.MAF=0.01,
-                              verbose=1)
-
-    ## export numeric imputed geno file
-    p2f.num <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
-    saveRDS(geno, file=p2f.num)
-
-    ## calculate the genomic relationship matrix
-    grm <- rrBLUP::A.mat(geno-1)
-    ## export grm
-    p2f.grm <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
-    saveRDS(grm, file=p2f.grm)
-  }
-}
+# tri=target.tri[9]
+# for(tri in target.tri){
+# 
+#   write(paste0("Processing trial: ", tri), stdout())
+#   files <- list.files(here("data","genotypic",tri,"nonFocal"))
+#   files <- grep(files, pattern=".vcf.gz", value=TRUE)
+#   files <- grep(files, pattern="_formatted|_imputed", value=TRUE, invert=TRUE)## keep only the unformatted vcf files
+#   for(file in files){
+#     
+#     vcf.p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
+# 
+#     ## get filename without extension
+#     file_noext <- gsub(pattern=".vcf.gz","",file)
+#     
+#     p2f.export.vcf <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_formatted.vcf.gz")
+#     ## use custom function from useful_functions.R
+#     geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
+#                               p2f.export.vcf=p2f.export.vcf,
+#                               remove.chrUkn=FALSE,
+#                               check.mrk.dups=TRUE,
+#                               remove.nonPolyMrk=FALSE,
+#                               tresh.heterozygous=NULL,
+#                               check.geno.dups=TRUE,
+#                               thresh.NA.ind=0.5,
+#                               thresh.NA.mrk=0.5,
+#                               format.names=FALSE,
+#                               imputation="Beagle",
+#                               p2f.beagle=here("code","beagle.27Feb25.75f.jar"),
+#                               thresh.MAF=0.01,
+#                               verbose=1)
+# 
+#     ## export numeric imputed geno file
+#     p2f.num <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_numeric.rds")
+#     saveRDS(geno, file=p2f.num)
+# 
+#     ## calculate the genomic relationship matrix
+#     grm <- rrBLUP::A.mat(geno-1)
+#     ## export grm
+#     p2f.grm <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file_noext,"_GRM.rds")
+#     saveRDS(grm, file=p2f.grm)
+#   }
+# }
 ```
 
 # Combine GRM matrices for each program
 
 
 ```{r}
-for(tri in trials_predictathon){
-  
-  write(paste0("Processing trial: ", tri), stdout())
-  grmList <- list()
-  
-  ## Step 1: convcert the focal accessions genomic matrix to a GRM
-  p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_genotypes_curated_numeric.rds")
-  genoFoc <- readRDS(p2f)
-  grmList[[1]] <- rrBLUP::A.mat(genoFoc-1)
-  ## export focal GRM
-  p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_focalAccessions_GRM.rds")
-  saveRDS(grmList[[1]], file=p2f)
-  
-  ## Step 2: load the non focal GRM matrices
-  files <- list.files(here("data","genotypic",tri,"nonFocal"))
-  ## keep only the GRM files
-  files <- grep("_GRM.rds", files, value = TRUE)
-  grmList <- c(grmList, lapply(files, function(file){
-    p2f <- paste0(here("data","genotypic",tri,"nonFocal"),"/",file)
-    geno = readRDS(p2f)
-    return(rrBLUP::A.mat(geno-1))
-  }))
-  genoNames <- map(grmList,rownames)
-  ap(genoNames)
-  
-  ## if same genotypes, skip
-  if(length(genoNames) > 1){
-    ggVennDiagram::ggVennDiagram(genoNames, label_alpha = 0, label_size = 4) 
-    if(all(genoNames[[1]] %in% genoNames[[2]]) & all(genoNames[[2]] %in% genoNames[[1]])){
-      genoNames[[2]] <- NULL
-      next
-    } else {
-      
-      ## combine genomic relationship matrices
-      var_indices <- list()
-      for(i in seq_along(grmList)){
-        var_indices[[i]] <- match(rownames(grmList[[i]]), unique(unlist(genoNames)))-1
+pbm <- c("CornellMaster_2025_McGowan")
+for(tri in setdiff(target.tri, pbm)){
+  p2f.export <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
+  if(!file.exists(p2f.export)){
+    
+    write(paste0("Processing trial: ", tri), stdout())
+    grmList <- list()
+    
+    ## Step 1: convcert the focal accessions genomic matrix to a GRM
+    p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_genotypes_curated_numeric.rds")
+    genoFoc <- readRDS(p2f)
+    grmList[[1]] <- rrBLUP::A.mat(genoFoc-1)
+    ## export focal GRM
+    p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_focalAccessions_GRM.rds")
+    saveRDS(grmList[[1]], file=p2f)
+    
+    ## Step 2: load the non focal GRM matrices
+    files <- list.files(here("data","genotypic",tri,"nonFocal"))
+    ## keep only the GRM files
+    files <- grep("_GRM.rds", files, value = TRUE)
+    grmList <- c(grmList, lapply(files, function(f){
+      readRDS(paste0(here("data","genotypic",tri,"nonFocal"),"/",f))
+      # geno = readRDS(p2f)
+      # return(rrBLUP::A.mat(geno-1))
+    }))
+    genoNames <- map(grmList,rownames)
+    ap(genoNames)
+    
+    ## if same genotypes, skip
+    if(length(genoNames) > 1){
+      ggVennDiagram::ggVennDiagram(genoNames, label_alpha = 0, label_size = 4) 
+      if(all(genoNames[[1]] %in% genoNames[[2]]) & all(genoNames[[2]] %in% genoNames[[1]])){
+        genoNames[[2]] <- NULL
+        next
+      } else {
+        
+        ## combine genomic relationship matrices
+        var_indices <- list()
+        for(i in seq_along(grmList)){
+          var_indices[[i]] <- match(rownames(grmList[[i]]), unique(unlist(genoNames)))-1
+        }
+        
+        # combine GRM matrices
+        comb_grm <- covariance_combiner(
+          partial_covs=grmList,
+          var_indices=var_indices,
+          degrees_freedom=rep(100, length(grmList)),
+          calc_sampling_cov = FALSE
+        )
+        dim(comb_grm$psi)
+        grm_combined <- comb_grm$psi
+        ## export combined GRM
+        p2f.export <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
+        saveRDS(grm_combined, file=p2f.export)
       }
-      
-      # combine GRM matrices
-      comb_grm <- covariance_combiner(
-        partial_covs=grmList,
-        var_indices=var_indices,
-        degrees_freedom=rep(100, length(grmList)),
-        calc_sampling_cov = FALSE
-      )
-      dim(comb_grm$psi)
-      grm_combined <- comb_grm$psi
-      ## export combined GRM
-      p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
-      saveRDS(grm_combined, file=p2f)
     }
   }
 }
