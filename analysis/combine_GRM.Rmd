@@ -50,7 +50,7 @@ trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVRE
 For non-focal accessions
 
 ```{r}
-tri=trials_predictathon[3]
+tri=trials_predictathon[9]
 for(tri in trials_predictathon){
 
   write(paste0("Processing trial: ", tri), stdout())
