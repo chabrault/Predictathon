@@ -1,0 +1,754 @@
+---
+title: "Merge + Impute non-focal genotypes by program"
+author: "Marcos"
+date: "2026-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+#Libraries
+```{r}
+suppressPackageStartupMessages(library(here))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(vcfR))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(vcfR))
+
+```
+#Project root
+```{r}
+here::here()
+list.files(here("data","genotypic"), recursive = FALSE)
+
+
+```
+#WSM 
+```{r}
+# Choose ONE focal trial folder to start (WSU program files are stored under this focal trial)
+focal_trial <- "AWY1_DVPWA_2024"
+
+# Choose ONE program folder to start
+program_folder <- "washington_state_university"
+
+# Path where your non-focal VCFs live
+p2d <- here("data", "genotypic", focal_trial, "nonFocal", program_folder)
+
+# List VCFs
+vcf_files <- list.files(p2d, pattern = "\\.vcf\\.gz$", full.names = TRUE)
+
+length(vcf_files)
+head(vcf_files, 3)
+
+#Build a manifest and deduplicate the VCFs (keep only unique archived VCFs)
+
+# Build a manifest from filenames
+wsu_manifest <- tibble(vcf_path = vcf_files) |>
+  mutate(
+    file = basename(vcf_path),
+    trial_id = as.integer(str_match(file, "trial_(\\d+)_")[,2]),
+    protocol_id = as.integer(str_match(file, "_prot_(\\d+)_")[,2]),
+    project_id  = as.integer(str_match(file, "_proj_(\\d+)_")[,2]),
+    archived_file = str_match(file, "_proj_\\d+_(.*)\\.vcf\\.gz$")[,2]
+  )
+
+# How many unique archived VCFs do we actually have?
+wsu_unique <- wsu_manifest |>
+  distinct(protocol_id, project_id, archived_file, .keep_all = TRUE) |>
+  arrange(protocol_id, project_id, archived_file)
+
+nrow(wsu_manifest)   # total files on disk
+nrow(wsu_unique)     # unique archived VCFs to process
+
+wsu_unique |>
+  select(protocol_id, project_id, archived_file) |>
+  distinct()
+
+#Keep one file 
+keep_file <- wsu_unique$vcf_path[1]
+keep_file
+
+#Delete the old files
+dup_files <- setdiff(wsu_manifest$vcf_path, keep_file)
+length(dup_files)     # should be 16
+
+# delete the duplicates
+file.remove(dup_files)
+
+# re-check
+length(list.files(p2d, pattern="\\.vcf\\.gz$", full.names=TRUE))
+
+
+#Read that VCF and extract a numeric genotype matrix (0/1/2)
+
+
+# 1) read VCF
+vcf <- vcfR::read.vcfR(keep_file, verbose = FALSE)
+
+# 2) extract GT calls (strings like 0/0, 0/1, 1/1)
+gt <- vcfR::extract.gt(vcf, element = "GT", as.numeric = FALSE)
+
+dim(gt)              # markers x samples
+gt[1:3, 1:5]         # quick sanity check
+
+# 3) convert GT -> dosage (0,1,2) with NA for missing
+gt_to_dosage <- function(x){
+  x <- gsub("\\|", "/", x)      # handle phased genotypes
+  out <- rep(NA_integer_, length(x))
+
+  out[x %in% c("0/0")] <- 0L
+  out[x %in% c("0/1","1/0")] <- 1L
+  out[x %in% c("1/1")] <- 2L
+
+  # common missing encodings
+  out[x %in% c("./.", ".|.")] <- NA_integer_
+  out
+}
+
+dosage <- apply(gt, 2, gt_to_dosage)
+dosage <- as.matrix(dosage)
+
+dim(dosage)          # markers x samples
+dosage[1:3, 1:5]
+
+
+#Add marker IDs
+
+# 1) marker IDs (CHROM:POS is a stable key for merging)
+fix <- as.data.frame(vcf@fix, stringsAsFactors = FALSE)
+marker_id <- paste0(fix$CHROM, ":", fix$POS)
+
+# ensure marker_id length matches rows
+stopifnot(length(marker_id) == nrow(dosage))
+
+# put marker_id as rownames
+rownames(dosage) <- marker_id
+
+# 2) sanity checks on dosage values
+table(as.vector(dosage), useNA = "ifany")
+
+# 3) missingness rates
+marker_missing <- rowMeans(is.na(dosage))
+sample_missing <- colMeans(is.na(dosage))
+
+summary(marker_missing)
+summary(sample_missing)
+
+# show the worst 5 markers and worst 5 samples
+sort(marker_missing, decreasing = TRUE)[1:5]
+sort(sample_missing, decreasing = TRUE)[1:5]
+
+any(duplicated(rownames(dosage)))
+
+
+#Imputation mean imputation per marker
+dosage_imp <- dosage
+
+for(i in 1:nrow(dosage_imp)){
+  marker_mean <- mean(dosage_imp[i, ], na.rm = TRUE)
+  dosage_imp[i, is.na(dosage_imp[i, ])] <- marker_mean
+}
+
+# confirm no missing values remain
+sum(is.na(dosage_imp))
+
+
+#Saving
+
+# save matrix
+saveRDS(dosage_imp, here("data","genotypic",
+                         focal_trial,
+                         "nonFocal",
+                         program_folder,
+                         "geno_matrix_imputed.rds"))
+
+# verify
+file.exists(here("data","genotypic",
+                 focal_trial,
+                 "nonFocal",
+                 program_folder,
+                 "geno_matrix_imputed.rds"))
+
+
+```
+
+# UMN
+```{r}
+
+# =========================
+# Settings (UMN)
+# =========================
+focal_trial     <- "24Crk_AY2-3"
+program_folder  <- "university_of_minnesota"
+p2d             <- here("data", "genotypic", focal_trial, "nonFocal", program_folder)
+stopifnot(dir.exists(p2d))
+
+manifest_csv <- file.path(p2d, "manifest_umn_nonfocal.csv")
+stopifnot(file.exists(manifest_csv))
+
+# =========================
+# 1) Read manifest + sanity
+# =========================
+umn_manifest <- fread(manifest_csv) |> as.data.frame()
+
+cat("Manifest rows:", nrow(umn_manifest), "\n")
+cat("Manifest cols:", ncol(umn_manifest), "\n")
+
+# This assumes your manifest has these columns (based on your file)
+needed_cols <- c("best_protocol_id", "best_project_id", "vcf_file_name", "out_file")
+stopifnot(all(needed_cols %in% names(umn_manifest)))
+
+# Add explicit vcf path column (your manifest stores the downloaded file path in out_file)
+umn_manifest <- umn_manifest |> mutate(vcf_path = out_file)
+
+# =========================
+# 2) Deduplicate VCF files on disk
+#    Keep ONE file per unique archived VCF (prot+project+file_name).
+# =========================
+umn_keep <- umn_manifest |>
+  distinct(best_protocol_id, best_project_id, vcf_file_name, .keep_all = TRUE)
+
+keep_files <- umn_keep$vcf_path
+
+# Files listed in manifest but not among the "keep" set
+dup_files <- setdiff(umn_manifest$vcf_path, keep_files)
+
+cat("Will delete duplicate VCF downloads:", length(dup_files), "\n")
+
+# Only delete files that actually exist (safety)
+dup_files_exist <- dup_files[file.exists(dup_files)]
+
+if(length(dup_files_exist) > 0){
+  ok <- file.remove(dup_files_exist)
+  stopifnot(all(ok))
+}
+
+# Confirm what is left in the folder
+vcf_files <- list.files(p2d, pattern="\\.vcf\\.gz$", full.names=TRUE)
+cat("VCFs left on disk:", length(vcf_files), "\n")
+stopifnot(length(vcf_files) == nrow(umn_keep))  # should match unique archived VCF count
+
+# =========================
+# Helpers
+# =========================
+
+# Convert a GT string (e.g. "0/1", "1|0", "./.") into ALT dosage 0/1/2, else NA
+gt_string_to_dosage <- function(x){
+  if(is.na(x) || x %in% c(".", "./.", ".|.")) return(NA_integer_)
+  x <- gsub("\\|", "/", x)                 # ignore phase
+  a <- unlist(strsplit(x, "/"))
+  if(length(a) != 2) return(NA_integer_)
+  if(any(a == ".")) return(NA_integer_)
+  # If alleles aren't numeric (rare), return NA instead of error
+  if(any(!grepl("^[0-9]+$", a))) return(NA_integer_)
+  sum(as.integer(a))
+}
+
+# Read VCF and return dosage matrix markers x samples (integer 0/1/2/NA)
+vcf_to_dosage <- function(vcf_path){
+  vcf <- read.vcfR(vcf_path, verbose = FALSE)
+  gt  <- extract.gt(vcf, element = "GT", as.numeric = FALSE)  # variants x samples (vcfR default)
+
+  dosage <- apply(gt, c(1,2), gt_string_to_dosage)
+  storage.mode(dosage) <- "integer"
+
+  # Preserve names
+  rownames(dosage) <- rownames(gt)
+  colnames(dosage) <- colnames(gt)
+
+  dosage
+}
+
+# Mean-impute by marker (row)
+impute_by_marker_mean <- function(dosage){
+  m <- rowMeans(dosage, na.rm = TRUE)
+  m[is.nan(m)] <- NA_real_
+
+  for(i in seq_len(nrow(dosage))){
+    miss <- is.na(dosage[i, ])
+    if(any(miss)){
+      # If a marker is all-missing, rowMean is NA: keep NA? or set to 0?
+      # Here: set to 0 to avoid NA in final matrix (you can change this).
+      fill <- m[i]
+      if(is.na(fill)) fill <- 0
+      dosage[i, miss] <- fill
+    }
+  }
+  dosage
+}
+
+# =========================
+# 3) Process each VCF -> (dosage + QC + imputed) -> RDS
+# =========================
+out_dir <- file.path(p2d, "rds")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+results <- list()
+
+for(vcf_path in vcf_files){
+
+  message("Processing: ", basename(vcf_path))
+
+  dosage <- vcf_to_dosage(vcf_path)
+  stopifnot(all(dosage %in% c(0L,1L,2L,NA)))
+
+  # QC summaries
+  marker_missing <- rowMeans(is.na(dosage))
+  sample_missing <- colMeans(is.na(dosage))
+
+  dosage_imp <- impute_by_marker_mean(dosage)
+  stopifnot(sum(is.na(dosage_imp)) == 0)
+
+  obj <- list(
+    source_vcf = vcf_path,
+    n_markers  = nrow(dosage),
+    n_samples  = ncol(dosage),
+    missing_rate_matrix = mean(is.na(dosage)),
+    marker_missing_summary = summary(marker_missing),
+    sample_missing_summary = summary(sample_missing),
+    # keep raw if you want; it can make RDS huge for GBS
+    dosage_raw = dosage,
+    dosage_imp = dosage_imp
+  )
+
+  stem <- basename(vcf_path) |> str_replace("\\.vcf\\.gz$", "")
+  out_file <- file.path(out_dir, paste0(stem, "_dosage_imputed.rds"))
+
+  saveRDS(obj, out_file, compress = "xz")
+  results[[basename(vcf_path)]] <- out_file
+
+  message("Saved: ", out_file)
+}
+
+results
+
+# =========================
+# 4) Write RDS manifest
+# =========================
+rds_files <- list.files(out_dir, pattern="\\.rds$", full.names=TRUE)
+stopifnot(length(rds_files) > 0)
+
+manifest_rds <- lapply(rds_files, function(f){
+  obj <- readRDS(f)
+  data.frame(
+    program_folder = program_folder,
+    source_vcf = obj$source_vcf,
+    rds_file = f,
+    n_markers = obj$n_markers,
+    n_samples = obj$n_samples,
+    missing_rate_matrix = obj$missing_rate_matrix,
+    file_size_mb = round(file.info(f)$size / (1024^2), 2),
+    stringsAsFactors = FALSE
+  )
+}) |> bind_rows()
+
+manifest_rds_path <- file.path(out_dir, "manifest_rds_umn.csv")
+write.csv(manifest_rds, manifest_rds_path, row.names = FALSE)
+
+manifest_rds_path
+manifest_rds
+```
+# MSU
+```{r}
+suppressPackageStartupMessages({
+  library(here)
+  library(data.table)
+  library(dplyr)
+  library(stringr)
+  library(vcfR)
+})
+
+focal_trial    <- "25_Big6_SVREC_SVREC"
+program_folder <- "michigan_state_university"
+manifest_file  <- "manifest_msu_nonfocal.csv"
+
+p2d <- here("data","genotypic", focal_trial, "nonFocal", program_folder)
+stopifnot(dir.exists(p2d))
+
+man <- fread(file.path(p2d, manifest_file)) |> as.data.frame()
+
+# identify chip VCF group (AgriSeq 4K)
+msu_chip <- man |>
+  filter(grepl("AgriSeq", best_protocol, ignore.case = TRUE)) |>
+  distinct(best_protocol_id, best_project_id, vcf_file_name)
+
+stopifnot(nrow(msu_chip) == 1)
+
+prot_id   <- msu_chip$best_protocol_id
+proj_id   <- msu_chip$best_project_id
+file_name <- msu_chip$vcf_file_name
+
+vcf_all <- list.files(p2d, pattern="\\.vcf\\.gz$", full.names=TRUE)
+
+pattern <- paste0("prot_", prot_id, "_proj_", proj_id, "_", file_name)
+vcf_hit <- vcf_all[grepl(pattern, vcf_all)]
+stopifnot(length(vcf_hit) >= 1)
+
+# keep exactly one copy (OPTIONAL deletion)
+vcf_path <- vcf_hit[1]
+# if (length(vcf_hit) > 1) file.remove(vcf_hit[-1])
+
+# read + GT -> dosage
+vcf <- read.vcfR(vcf_path, verbose = FALSE)
+gt  <- extract.gt(vcf, element = "GT", as.numeric = FALSE)  # variants x samples
+
+dosage <- apply(gt, c(1,2), function(x){
+  if(is.na(x) || x %in% c(".", "./.", ".|.")) return(NA_integer_)
+  a <- unlist(strsplit(x, "[/|]"))
+  if(any(a == ".")) return(NA_integer_)
+  sum(as.integer(a))
+})
+storage.mode(dosage) <- "integer"
+
+stopifnot(all(dosage %in% c(0L,1L,2L,NA)))
+
+# QC
+qc_table <- sort(table(as.vector(dosage), useNA="ifany"), decreasing = TRUE)
+marker_missing <- rowMeans(is.na(dosage))
+sample_missing <- colMeans(is.na(dosage))
+
+# drop all-missing markers, then mean-impute
+keep <- rowSums(!is.na(dosage)) > 0
+dosage_f <- dosage[keep, , drop = FALSE]
+
+m <- rowMeans(dosage_f, na.rm = TRUE)
+dosage_imp <- dosage_f
+for(i in seq_len(nrow(dosage_imp))){
+  miss <- is.na(dosage_imp[i, ])
+  if(any(miss)) dosage_imp[i, miss] <- m[i]
+}
+stopifnot(sum(is.na(dosage_imp)) == 0)
+
+# save
+out_dir <- here("data","genotypic", focal_trial, "nonFocal", program_folder, "rds")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+stem <- str_replace(basename(vcf_path), "\\.vcf\\.gz$", "")
+out_file <- file.path(out_dir, paste0(stem, "_dosage_imputed.rds"))
+
+obj <- list(
+  source_vcf = vcf_path,
+  program_folder = program_folder,
+  protocol_id = prot_id,
+  project_id = proj_id,
+  file_name = file_name,
+  n_markers_raw = nrow(dosage),
+  n_markers_final = nrow(dosage_imp),
+  n_samples = ncol(dosage_imp),
+  qc_table_raw = qc_table,
+  marker_missing_summary_raw = summary(marker_missing),
+  sample_missing_summary_raw = summary(sample_missing),
+  dosage_imp = dosage_imp
+)
+
+saveRDS(obj, out_file, compress = "xz")
+stopifnot(file.exists(out_file))
+out_file
+
+#Inspect output
+obj <- readRDS(out_file)
+str(obj, max.level = 1)
+X <- obj$dosage_imp
+dim(X)
+X[1:5, 1:6]
+
+```
+#University of Wisconsin
+```{r}
+focal_trial    <- "OHRWW_2025_SPO"                     # <-- change
+program_folder <- "university_of_wisconsin"            # <-- change
+
+p2d <- here("data","genotypic", focal_trial, "nonFocal", program_folder)
+stopifnot(dir.exists(p2d))
+
+# find the manifest automatically (you named them manifest_*_nonfocal.csv)
+manifest_path <- list.files(p2d, pattern="^manifest_.*_nonfocal\\.csv$", full.names=TRUE)
+stopifnot(length(manifest_path) == 1)
+
+man <- fread(manifest_path) |> as.data.frame()
+
+# show the genotyping platforms present
+man |>
+  count(best_protocol, best_protocol_id, best_project_id, vcf_file_name, sort=TRUE) |>
+  print(n=50)
+
+
+
+focal_trial    <- "OHRWW_2025_SPO"
+program_folder <- "university_of_wisconsin"
+
+prot_id   <- 299
+proj_id   <- 11009
+file_name <- "2025-12-16_14:44:02_fileoUdn"
+
+p2d <- here("data","genotypic", focal_trial, "nonFocal", program_folder)
+stopifnot(dir.exists(p2d))
+
+vcf_all <- list.files(p2d, pattern="\\.vcf\\.gz$", full.names=TRUE)
+
+pattern <- paste0("prot_", prot_id, "_proj_", proj_id, "_", file_name)
+vcf_hit <- vcf_all[grepl(pattern, vcf_all)]
+
+length(vcf_hit)
+vcf_hit
+
+
+# keep the first one, delete the rest
+keep_file <- vcf_hit[1]
+dup_files <- setdiff(vcf_hit, keep_file)
+
+cat("Keeping:\n", keep_file, "\n\n")
+cat("Deleting n =", length(dup_files), "\n")
+
+file.remove(dup_files)
+
+# confirm only 1 remains for that archived VCF
+vcf_left <- list.files(p2d, pattern="\\.vcf\\.gz$", full.names=TRUE)
+vcf_left <- vcf_left[grepl(pattern, vcf_left)]
+
+length(vcf_left)
+vcf_left
+
+
+
+vcf_path <- vcf_left[1]
+
+vcf <- read.vcfR(vcf_path, verbose = FALSE)
+gt  <- extract.gt(vcf, element = "GT", as.numeric = FALSE)  # variants x samples
+
+dim(gt)
+
+# Convert GT -> dosage (0/1/2, NA)
+dosage <- apply(gt, c(1,2), function(x){
+  if (is.na(x) || x %in% c(".", "./.", ".|.")) return(NA_integer_)
+  a <- strsplit(x, "[/|]")[[1]]
+  if (any(a == ".")) return(NA_integer_)
+  sum(as.integer(a))
+})
+storage.mode(dosage) <- "integer"
+
+# QC: check values and missingness
+stopifnot(all(dosage %in% c(0L,1L,2L,NA)))
+
+qc_table <- table(as.vector(dosage), useNA = "ifany")
+qc_table
+
+marker_missing <- rowMeans(is.na(dosage))
+sample_missing <- colMeans(is.na(dosage))
+
+summary(marker_missing)
+summary(sample_missing)
+
+# count all-missing markers
+sum(rowSums(!is.na(dosage)) == 0)
+
+# 1) Drop markers that are all missing
+keep <- rowSums(!is.na(dosage)) > 0
+dosage_f <- dosage[keep, , drop = FALSE]
+
+# 2) Mean-impute by marker (row)
+m <- rowMeans(dosage_f, na.rm = TRUE)
+dosage_imp <- dosage_f
+for(i in seq_len(nrow(dosage_imp))){
+  miss <- is.na(dosage_imp[i, ])
+  if(any(miss)) dosage_imp[i, miss] <- m[i]
+}
+stopifnot(sum(is.na(dosage_imp)) == 0)
+
+# 3) Drop monomorphic markers (variance = 0)
+keep_var <- apply(dosage_imp, 1, function(x) var(x) > 0)
+dosage_imp <- dosage_imp[keep_var, , drop = FALSE]
+
+# 4) Summaries after filtering
+c(
+  n_markers_raw   = nrow(dosage),
+  n_markers_after = nrow(dosage_imp),
+  n_samples       = ncol(dosage_imp)
+)
+
+
+# ---- Save UW final matrix ----
+
+out_dir <- here("data","genotypic",
+                "OHRWW_2025_SPO",
+                "nonFocal",
+                "university_of_wisconsin",
+                "rds")
+
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+stem <- basename(vcf_path) |> str_replace("\\.vcf\\.gz$", "")
+out_file <- file.path(out_dir, paste0(stem, "_dosage_imputed.rds"))
+
+obj <- list(
+  source_vcf = vcf_path,
+  program_folder = "university_of_wisconsin",
+  protocol_id = 299,
+  project_id = 11009,
+  file_name = "2025-12-16_14:44:02_fileoUdn",
+  n_markers_raw = nrow(dosage),
+  n_markers_final = nrow(dosage_imp),
+  n_samples = ncol(dosage_imp),
+  dosage_imp = dosage_imp
+)
+
+saveRDS(obj, out_file, compress = "xz")
+
+file.exists(out_file)
+
+obj2 <- readRDS(out_file)
+dim(obj2$dosage_imp)
+
+
+```
+
+#Kansas
+
+```{r}
+
+# =========================
+# 2) PROCESS / IMPUTE / BUILD G
+# =========================
+
+
+# ---- Output folder ----
+proc_dir <- here("data", "genotypic", focal_trial_folder, "nonFocal",
+                 program_folder, "processed_rds")
+dir.create(proc_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ---- Helper: enforce unique variant IDs in a vcfR object ----
+make_vcf_variant_ids_unique <- function(vcf){
+  key <- paste(vcf@fix[, "CHROM"], vcf@fix[, "POS"], vcf@fix[, "REF"], vcf@fix[, "ALT"], sep=":")
+  key <- make.unique(key)
+  vcf@fix[, "ID"] <- key
+  rownames(vcf@fix) <- key
+  vcf
+}
+
+# ---- Helper: convert GT -> ALT-count dosage (0/1/2), counts any ALT allele (>0) ----
+gt_to_altcount <- function(x){
+  if (is.na(x) || x %in% c(".", "./.", ".|.")) return(NA_integer_)
+  a <- strsplit(x, "[/|]")[[1]]
+  if (any(a == ".")) return(NA_integer_)
+  a <- as.integer(a)
+  as.integer(sum(a > 0))
+}
+
+# ---- Helper: mean-impute per marker after filtering ----
+mean_impute_by_marker <- function(dos){
+  mu <- rowMeans(dos, na.rm = TRUE)
+  out <- dos
+  for(i in seq_len(nrow(out))){
+    miss <- is.na(out[i, ])
+    if(any(miss)) out[i, miss] <- mu[i]
+  }
+  out
+}
+
+# ---- Helper: build Z and G from dosage (markers x samples) ----
+build_Z_G <- function(dos){
+  p <- rowMeans(dos) / 2
+  keep <- p > 0 & p < 1
+  dos <- dos[keep, , drop = FALSE]
+  p <- p[keep]
+
+  Z <- sweep(dos, 1, 2*p, "-")
+  Z <- sweep(Z, 1, sqrt(2*p*(1-p)), "/")
+
+  G <- tcrossprod(t(Z)) / nrow(Z)
+  list(Z = Z, G = G, p = p)
+}
+
+# ---- Main processor for ONE VCF ----
+process_one_vcf <- function(vcf_path, sample_missing_max = 0.40){
+
+  message("\nProcessing: ", basename(vcf_path))
+
+  vcf <- read.vcfR(vcf_path, verbose = FALSE)
+  vcf <- make_vcf_variant_ids_unique(vcf)
+
+  gt <- extract.gt(vcf, element = "GT", as.numeric = FALSE) # variants x samples
+
+  # dosage: variants x samples
+  dosage <- apply(gt, c(1,2), gt_to_altcount)
+  storage.mode(dosage) <- "integer"
+
+  qc_table_raw <- sort(table(as.vector(dosage), useNA = "ifany"), decreasing = TRUE)
+
+  # drop all-missing markers
+  keep_mark <- rowSums(!is.na(dosage)) > 0
+  dosage1 <- dosage[keep_mark, , drop = FALSE]
+
+  # sample missingness (computed BEFORE imputation, after dropping all-missing markers)
+  sample_missing <- colMeans(is.na(dosage1))
+  keep_samp <- sample_missing <= sample_missing_max
+  dosage2 <- dosage1[, keep_samp, drop = FALSE]
+
+  # recompute marker missingness after sample filter (still pre-imputation)
+  marker_missing <- rowMeans(is.na(dosage2))
+
+  # impute
+  dosage_imp <- mean_impute_by_marker(dosage2)
+  stopifnot(sum(is.na(dosage_imp)) == 0)
+
+  # drop monomorphic markers
+  keep_var <- apply(dosage_imp, 1, function(x) var(x) > 0)
+  dosage_final <- dosage_imp[keep_var, , drop = FALSE]
+
+  # build Z and G
+  zg <- build_Z_G(dosage_final)
+
+  list(
+    source_vcf = vcf_path,
+
+    n_markers_raw = nrow(dosage),
+    n_samples_raw = ncol(dosage),
+
+    n_markers_after_drop_all_missing = nrow(dosage1),
+    n_samples_after_sample_filter = ncol(dosage2),
+
+    n_markers_final = nrow(dosage_final),
+    n_samples_final = ncol(dosage_final),
+
+    qc_table_raw = qc_table_raw,
+    marker_missing_summary = summary(marker_missing),
+    sample_missing_summary = summary(sample_missing),
+
+    sample_missing_max = sample_missing_max,
+    dropped_samples = names(sample_missing)[!keep_samp],
+
+    dosage_final = dosage_final,   # markers x samples
+    Z = zg$Z,                      # markers x samples (standardized)
+    G = zg$G,                      # samples x samples
+    p = zg$p
+  )
+}
+
+# ---- Run for all selected VCFs ----
+results <- list()
+
+for(vcf_path in vcf_files){
+
+  obj <- process_one_vcf(vcf_path, sample_missing_max = 0.40)
+
+  stem <- basename(vcf_path) |> str_replace("\\.vcf\\.gz$", "")
+  out_file <- file.path(proc_dir, paste0(stem, "_processed.rds"))
+
+  saveRDS(obj, out_file, compress = "xz")
+  message("Saved: ", out_file)
+
+  results[[basename(vcf_path)]] <- out_file
+}
+
+results
+
+```
+
+
+
+
+

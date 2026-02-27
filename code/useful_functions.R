@@ -1,4 +1,23 @@
 
+
+#' Get cross-validation folds
+#'
+#' @param index length of total set to select from, numeric vector of length 1
+#' @param nb.folds number of fold to divide, default is 5
+#' @param seed (optional) for reproducibility, set a seed.
+#'
+#' @return list of testing set indexes for each fold.
+
+getFolds <- function(index, nb.folds=5, seed=NULL){
+  stopifnot(nb.folds <= index,
+            ifelse(! is.null(seed), is.numeric(seed), TRUE))
+  if(!is.null(seed)){set.seed(seed, kind="Mersenne-Twister")}
+  split <- split(sample(1:index), rep(1:nb.folds, length=index))
+  names(split) <- paste0("Fold", seq(1:nb.folds))
+  return(split)
+}
+
+
 #' Format and curate vcf file
 #'
 #' @param vcf.p2f path to the vcf file
@@ -73,13 +92,15 @@ format_curate_vcf <- function(vcf.p2f=NULL,
     if(verbose > 0) print("Load the vcf file...")
     ## load vcf file and convert to gt
     vcf <- vcfR::read.vcfR(vcf.p2f, verbose = FALSE)
-    gt <- vcfR::extract.gt(vcf, element = "GT", as.numeric=FALSE, IDtoRowNames = TRUE)
+    gt <- as.data.frame(vcfR::extract.gt(vcf, element = "GT", as.numeric=FALSE, IDtoRowNames = FALSE))
     meta <- vcf@meta
     mrk.info <- tibble::as_tibble(vcfR::getFIX(vcf))
+    gt$ID <- mrk.info$ID
+    colsGT <- colnames(gt)[!colnames(gt) %in% c("ID")]
     mrk.info$POS <- as.numeric(mrk.info$POS)
     mrk.info <- dplyr::arrange(mrk.info, CHROM,POS)
     ## combine marker information with genotype
-    vcf.file <- cbind(mrk.info[,c("CHROM","POS")],gt[mrk.info$ID,])
+    vcf.file <- cbind(mrk.info[,c("CHROM","POS")],gt[match(mrk.info$ID,gt$ID),colsGT])
     vcf.file$POS <- as.numeric(vcf.file$POS)
 
     rm(vcf, gt)
