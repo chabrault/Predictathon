@@ -1,0 +1,72 @@
+---
+title: "environmental_covariates"
+author: "Luke LeBar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Pulling Environmental Covariates from T3
+
+## Loading Packages
+
+```{r}
+rm(list=ls())
+suppressPackageStartupMessages(library(BrAPI))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(here))
+suppressPackageStartupMessages(library(tidygeocoder))
+suppressPackageStartupMessages(library(nasapower))
+```
+
+## Load T3 Trial Metadata
+
+```{r}
+setwd("C:/Users/lukel/OneDrive/Documents/GitHub/Predictathon/data")
+trials <- read.csv("allTrials_metadata.csv")
+```
+
+## Geocode Locations
+
+```{r}
+trials_geocoded <- trials %>%
+  geocode(address = location, method = 'osm', lat = latitude, long = longitude)
+if(any(is.na(trials_geocoded$latitude))) {
+  warning("Some locations could not be geocoded automatically.")
+}
+```
+
+## Retrieve Environmental Data from NASA
+
+```{r}
+fetch_weather <- function(lat, lon, year) {
+  if(is.na(lat) | is.na(lon)) return(NULL)
+  start_date <- paste0(year, "-03-01")
+  end_date   <- paste0(year, "-09-30")
+  
+  # Fetch data using nasapower
+  # T2M = Temperature at 2 meters (C)
+  # PRECTOTCORR = Bias-corrected precipitation (mm)
+  # ALLSKY_SFC_SW_DWN = Downward Shortwave Radiation (MJ/m^2/day)
+  daily_data <- get_power(
+    community = "ag",
+    lonlat = c(lon, lat),
+    pars = c("T2M", "PRECTOTCORR", "ALLSKY_SFC_SW_DWN"),
+    dates = c(start_date, end_date),
+    temporal_api = "daily"
+  )
+  return(daily_data)
+}
+print("Fetching environmental covariates from NASA...")
+env_results <- trials_geocoded %>%
+  mutate(
+    weather_data = pmap(list(latitude, longitude, year), fetch_weather)
+  )
+trials_env <- env_results %>%
+  tidyr::unnest(weather_data) %>%
+  select(studyDbId, location, year, latitude, longitude, YYYYMMDD, T2M, PRECTOTCORR, ALLSKY_SFC_SW_DWN)
+
+trials_env
+
+write.csv(trials_env, "environmental_covariates.csv")
+```

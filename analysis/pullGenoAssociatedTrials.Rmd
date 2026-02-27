@@ -19,7 +19,8 @@ suppressPackageStartupMessages(library(dplyr)) # formatting
 suppressPackageStartupMessages(library(purrr)) # handle lists
 ## devtools::install_github("chabrault/HRSWGS") # custom package instal
 #suppressPackageStartupMessages(library(HRSWGS)) # custom package
-## devtools::install_github("TriticeaeToolbox/BrAPI.R")
+#devtools::install_github("TriticeaeToolbox/BrAPI.R")
+pak::pak("jeanlucj/T3BrapiHelpers")
 suppressPackageStartupMessages(library(BrAPI)) # T3 connection
 suppressPackageStartupMessages(library(T3BrapiHelpers)) # T3 helper
 suppressPackageStartupMessages(library(DT)) # print table
@@ -30,7 +31,6 @@ suppressPackageStartupMessages(library(janitor)) # make clean names
 
 ```
 
-
 # Set up root directory
 
 ```{r current dir}
@@ -38,17 +38,16 @@ here::i_am("analysis/pullGenoAssociatedTrials.Rmd")
 source(here("code","useful_functions.R"))
 ```
 
-
 ```{r}
 trials_predictathon <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
                          "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
                          "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
 ```
 
-
 # Create T3 connection
 
 What's the difference between getBrAPIConnection and createBrAPIConnection?
+
 ```{r}
 #wheat <- getBrAPIConnection("T3/Wheat")
 db <- getBrAPIConnection("T3/Wheat")
@@ -69,7 +68,6 @@ manifests
 protid = unique(manifests$protocol_id)
 ```
 
-
 # Get list of associated trials
 
 ```{r}
@@ -86,8 +84,8 @@ head(all_trials_init)
 
 # Pull genotyping platform for each trial
 
-
 Trial by trial
+
 ```{r pull_geno_platform, include=TRUE}
 
 p2f <- here("data","allTrials_metadata_genotyping_platform.csv") # path to file
@@ -158,23 +156,26 @@ p2f <- here("data","allTrials_metadata_genotyping_platform.csv") # path to file
 #}
 ```
 
-
 # Explore output
 
 Number of trials with genotyped lines for each program
+
 ```{r}
 all_trials_geno <- all_trials |> 
   filter(!is.na(prop_geno) & prop_geno > 1 & nb_genos > 5) 
 dim(all_trials_geno) ## 61 x 14
 table(all_trials_geno$program)
 ```
+
 Kansas doesn't have any trial with genotyped lines.
 
 Check the genotyping platform diversity
+
 ```{r}
 table(all_trials_geno$best_protocol)
 intersect(manifests$protocol_name, unique(all_trials_geno$best_protocol))
 ```
+
 # Download all vcf files
 
 ```{r}
@@ -215,7 +216,6 @@ for(prog in focal_prg){
 }
 ```
 
-
 # Combine all vcf files into one per program
 
 ## Load vcf files
@@ -224,17 +224,14 @@ for(prog in focal_prg){
 #TODO
 ```
 
-
 ## Merge into one big file
 
 ```{r}
 #TODO
 ```
 
-
-
 ## Format and impute
+
 ```{r}
 #TODO
 ```
-
