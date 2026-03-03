@@ -48,24 +48,31 @@ t0 <- proc.time()
 
 # Load data
 
-## Genomic data
+## From T3
 
-Load the cleaned and imputed genomic data, filtered for minor allele frequency at 5%.
-File generated in `combine_format_vcf`.
+```{r}
 
-```{r load_geno}
-
-p2f.geno <- here("data","genotypic", "YT_Urb_25","clean","YT_Urb_25_genotypes_curated_numeric.rds")
-file.mtime(p2f.geno)
-geno <- readRDS(p2f.geno)
-dim(geno)
-ap(geno)
-geno.init <- geno
-geno <- janitor::remove_constant(geno)
-geno[,2:ncol(geno)] <- scale(geno[,2:ncol(geno)], center=T, scale=T)
-ap(geno)
-gid.geno <- rownames(geno)
 ```
+
+
+<!-- ## Genomic data -->
+
+<!-- Load the cleaned and imputed genomic data, filtered for minor allele frequency at 5%. -->
+<!-- File generated in `combine_format_vcf`. -->
+
+<!-- ```{r load_geno} -->
+
+<!-- p2f.geno <- here("data","genotypic", "YT_Urb_25","clean","YT_Urb_25_genotypes_curated_numeric.rds") -->
+<!-- file.mtime(p2f.geno) -->
+<!-- geno <- readRDS(p2f.geno) -->
+<!-- dim(geno) -->
+<!-- ap(geno) -->
+<!-- geno.init <- geno -->
+<!-- geno <- janitor::remove_constant(geno) -->
+<!-- geno[,2:ncol(geno)] <- scale(geno[,2:ncol(geno)], center=T, scale=T) -->
+<!-- ap(geno) -->
+<!-- gid.geno <- rownames(geno) -->
+<!-- ``` -->
 
 
 
