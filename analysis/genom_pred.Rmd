@@ -132,8 +132,8 @@ Steps:
 ```{r}
 tri="TCAP_2025_MANKS"
 
-res.cv0 <- expand.grid(trial=target.pred,  corP=NA,
-                       nb.genos=NA, nb.envs=NA)
+res.cv0 <- expand.grid(trial=target.pred,  corP=NA, 
+                       wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
 
 
 for(tri in target.pred){
@@ -175,10 +175,14 @@ for(tri in target.pred){
     }
     ## add observed values
     df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
+    ## calculate PA in each environment
+    pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
+      summarize(pa=cor(YLD, pred, use="pairwise.complete.obs"))
     ## calculate correlation across environments
-    pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
+    pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs")
     idx <- which(res.cv0$trial == tri)
     res.cv0$corP[idx] <- pa
+    res.cv0$wEnv.corP[idx] <- mean(pa.within.env$pa, na.rm=TRUE)
     res.cv0$nb.envs[idx] <- length(envs)
     
     ## add training/validation set size of the last fold
@@ -192,6 +196,9 @@ for(tri in target.pred){
 
 
 # GBLUP CV00
+
+Objective: predict unknown genotypes in unknown trials in cross-validation.
+For each trial in a given program, identify the genotypes and remove them from the training set (or remove a subset of it if small number of genotypes). Train the model with other genotypes tested in other environments.
 
 ```{r}
 
