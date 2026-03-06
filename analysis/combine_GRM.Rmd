@@ -100,9 +100,10 @@ For AWY1, same vcf files were downloaded twice, copy the focal_accessions GRM to
 For Cornell, two files were identical but completely disjoint from the focalAccessions. Copy the focalAccessions_GRM to the combined_GRM.
 ```{r combine-grm}
 pbm <- c("CornellMaster_2025_McGowan", "AWY1_DVPWA_2024")
+rerun=TRUE
 for(tri in setdiff(target.tri, pbm)){
   p2f.export <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_combined_GRM.rds")
-  #if(!file.exists(p2f.export)){
+  if(!file.exists(p2f.export)|rerun){
     
     write(paste0("Processing trial: ", tri), stdout())
     grmList <- list()
@@ -157,7 +158,7 @@ for(tri in setdiff(target.tri, pbm)){
       }
     }
   }
-#}
+}
 ```
 
 

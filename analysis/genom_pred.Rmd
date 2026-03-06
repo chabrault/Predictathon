@@ -110,8 +110,8 @@ Steps:
 ```{r}
 tri=target.pred[1]
 
-df.res <- expand.grid(trial=target.pred,  corP=NA,
-                      nb.genos=NA, nb.envs=NA)
+df.res <- expand.grid(trial=target.pred,  corP=NA, 
+                      wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
 
 
 for(tri in target.pred){
@@ -126,11 +126,14 @@ for(tri in target.pred){
     
   }else {
     geno_sub <- genoList[[tri]][gid,gid]
-    pheno_sub <- pheno |> filter(GID %in% gid)
-    envs <- unique(pheno_sub$ENV)
+    pheno_sub <- pheno |> filter(GID %in% gid, !is.na(YLD))
+    ## select environments with more than 50 obs
+    envs <- pheno_sub %>% 
+      group_by(ENV) %>% summarize(n=n(),.groups="drop") %>% 
+      filter(n > 50) %>% pull(ENV)
+    pheno_sub <- pheno_sub %>% filter(ENV %in% envs)
     df_pred_e <- data.frame()
     for(e in envs){
-      
       pheno_train <- pheno_sub |> 
         mutate(YLD=ifelse(ENV %in% e, NA, YLD))
       ## fit GBLUP model
@@ -144,15 +147,29 @@ for(tri in target.pred){
     }
     ## add observed values
     df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
+    ## calculate PA in each environment
+    pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
+      summarize(pa=cor(YLD, pred, use="pairwise.complete.obs"))
     ## calculate correlation across environments
-    pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
+    pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs")
     idx <- which(df.res$trial == tri)
     df.res$corP[idx] <- pa
+    df.res$wEnv.corP[idx] <- mean(pa.within.env$pa, na.rm=TRUE)
     
     ## add training/validation set size of the last fold
     df.res$nb.genos[idx] <- length(unique(pheno_train$GID))
+    ## add number of environments tested
+    df.res$nb.envs[idx] <- length(envs)
     
-    
+    ## plot obs vs. pred
+    plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV))+
+      geom_point(size=1.5, alpha=0.6) +
+      theme_bw(base_size=13) +
+        guides(color=guide_legend(nrow=3))+
+        ggtitle(tri)+
+        theme(legend.position="bottom",
+              legend.title.position = "top")
+    )
   }
 }
 
@@ -160,6 +177,9 @@ for(tri in target.pred){
 
 
 # GBLUP CV00
+
+Objective: predict unknown genotypes in unknown trials in cross-validation.
+For each trial in a given program, identify the genotypes and remove them from the training set (or remove a subset of it if small number of genotypes). Train the model with other genotypes tested in other environments.
 
 ```{r}
 
