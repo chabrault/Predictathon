@@ -11,6 +11,7 @@ output: html_document
 
 ```{r}
 rm(list=ls())
+suppressPackageStartupMessages(library(here))
 suppressPackageStartupMessages(library(BrAPI))
 suppressPackageStartupMessages(library(purrr))
 suppressPackageStartupMessages(library(tidyverse))
@@ -22,8 +23,9 @@ suppressPackageStartupMessages(library(nasapower))
 ## Load T3 Trial Metadata
 
 ```{r}
-setwd("C:/Users/lukel/OneDrive/Documents/GitHub/Predictathon/data")
-trials <- read.csv("allTrials_metadata.csv")
+#setwd("C:/Users/lukel/OneDrive/Documents/GitHub/Predictathon/data")
+here::i_am("analysis/environmental_covariates.Rmd")
+trials <- read.csv(here("data","allTrials_metadata.csv"))
 ```
 
 ## Geocode Locations

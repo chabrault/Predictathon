@@ -1,13 +1,13 @@
 #!/bin/bash -l
-#SBATCH --time=6:00:00 
+#SBATCH --time=12:00:00 
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=2
 #SBATCH --mem=100g
 #SBATCH --tmp=100g
 #SBATCH --mail-type=END
 #SBATCH --mail-user=cbrault@umn.edu
-#SBATCH --output=GP
-#SBATCH --job-name=GP
+#SBATCH --output=GRM.Predictathon
+#SBATCH --job-name=GRM.Predictathon
 
 
 conda activate r_env
@@ -19,6 +19,6 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
 
-
-R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/genom_pred.Rmd')"
+R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/combine_GRM.Rmd')"
+#R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/genom_pred.Rmd')"
 
