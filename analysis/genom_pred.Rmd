@@ -32,7 +32,7 @@ suppressPackageStartupMessages(library(ggbeeswarm)) # ggplot geom_quasirandom
 #devtools::install_github("chabrault/HRSWGS")
 #suppressPackageStartupMessages(library(HRSWGS)) ## custom functions
 
-nb.cores <- 10
+nb.cores <- 6
 ```
 
 
@@ -54,6 +54,7 @@ t0 <- proc.time()
 target.pred <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
                  "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
                  "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+tri <- "2025_AYT_Aurora"
 ```
 
 # Load data
@@ -65,20 +66,30 @@ target.pred <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
 #              paste0(trials_predictathon,"_focalAccessions_GRM.rds"))
 p2fs <- here("data","genotypic", target.pred,"clean",
              paste0(target.pred,"_combined_GRM.rds"))
+#              paste0(trials_predictathon,"_focalAccessions_GRM.rds"))
+p2fs <- here("data","genotypic", target.pred,"clean",
+             paste0(target.pred,"_Predictathon_genotypes_curated_numeric.rds"))
+
 file.mtime(p2fs)
 ## for missing ones, use the focal accessions GRM
-missing <- which(is.na(file.exists(p2fs)))
-if(length(missing)>0){
-  p2fs[missing] <- here("data","genotypic", target.pred[missing],"clean",
-                        paste0(target.pred[missing],"_focalAccessions_GRM.rds"))
-}
+# missing <- which(is.na(file.exists(p2fs)))
+# if(length(missing)>0){
+#   p2fs[missing] <- here("data","genotypic", target.pred[missing],"clean",
+#                         paste0(target.pred[missing],"_focalAccessions_GRM.rds"))
+# }
 
 genoList <- lapply(p2fs, readRDS)
 names(genoList) <- target.pred
 ap(genoList)
-lapply(genoList, dim)
+sapply(genoList, dim)
+
+
+grmList <- lapply(genoList, function(x) x=rrBLUP::A.mat(x-1))
+ap(grmList)
+
 ```
 
+Small number of genotypes for "AWY1_DVPWA_2024"
 
 
 ## Phenotypic data
@@ -98,6 +109,17 @@ pheno <- pheno_init |>
   select(GID, PROG, LOC, YEAR, ENV, YLD)
 ```
 
+## Common genotypes
+
+```{r}
+grmList.cmon <- purrr::map(grmList, \(x){
+  int <- intersect(rownames(x), pheno$GID)
+  return(x[int,int])
+})
+lapply(grmList.cmon, nrow)
+```
+
+
 # GBLUP CV0
 
 cross validation by program.
@@ -108,34 +130,43 @@ Steps:
 - Predict each environment in turn using the other trials as training set.
 
 ```{r}
-tri=target.pred[1]
+tri="TCAP_2025_MANKS"
 
-df.res <- expand.grid(trial=target.pred,  corP=NA,
-                      nb.genos=NA, nb.envs=NA)
+res.cv0 <- expand.grid(trial=target.pred,  corP=NA,
+                       nb.genos=NA, nb.envs=NA)
 
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stdout())
   
   ## subset GID with geno and pheno data
-  gid.geno <- rownames(genoList[[tri]])
+  gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
     
   }else {
-    geno_sub <- genoList[[tri]][gid,gid]
+    ## subset pheno and geno from the program to predict
+    geno_sub <- grmList[[tri]][gid,gid]
     pheno_sub <- pheno |> filter(GID %in% gid)
-    envs <- unique(pheno_sub$ENV)
+    ## select environments with more than 50 obs
+    envs <- pheno_sub %>% 
+      group_by(ENV) %>% summarize(n=n(),.groups="drop") %>% 
+      filter(n > 50) %>% pull(ENV)
+    pheno_sub <- pheno_sub %>% filter(ENV %in% envs)
+    
     df_pred_e <- data.frame()
+    ## for loop over environments to predict each environment in turn
     for(e in envs){
-      
+      ## set yield data for the test environment to NA
       pheno_train <- pheno_sub |> 
         mutate(YLD=ifelse(ENV %in% e, NA, YLD))
       ## fit GBLUP model
+      ### add fixed effects of location and year instead of env?
       fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD", 
-                              K=geno_sub, fixed="ENV",
+                              K=geno_sub, 
+                              fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
                               n.core=nb.cores)
       ## export predicted values
       df_pred_e <- rbind(df_pred_e, 
@@ -146,11 +177,12 @@ for(tri in target.pred){
     df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
     ## calculate correlation across environments
     pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
-    idx <- which(df.res$trial == tri)
-    df.res$corP[idx] <- pa
+    idx <- which(res.cv0$trial == tri)
+    res.cv0$corP[idx] <- pa
+    res.cv0$nb.envs[idx] <- length(envs)
     
     ## add training/validation set size of the last fold
-    df.res$nb.genos[idx] <- length(unique(pheno_train$GID))
+    res.cv0$nb.genos[idx] <- length(unique(pheno_train$GID))
     
     
   }
@@ -163,6 +195,63 @@ for(tri in target.pred){
 
 ```{r}
 
+res.cv00 <- expand.grid(trial=target.pred,  corP=NA,
+                        nb.genos=NA, nb.envs=NA)
+## subset GID with geno and pheno data
+gid.geno <- rownames(grmList[[tri]])
+gid <- intersect(gid.geno, pheno$GID)
+length(gid)
+# if(length(gid) == 0){
+#   write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
+#   
+# }else {
+## subset pheno and geno from the program to predict
+geno_sub <- grmList[[tri]][gid,gid]
+pheno_sub <- pheno |> filter(GID %in% gid)
+df_pred_e <- data.frame()
+
+## select environments with more than 50 obs
+envs <- pheno_sub %>% 
+  group_by(ENV) %>% summarize(n=n(),.groups="drop") %>% 
+  filter(n > 50) %>% pull(ENV)
+pheno_sub <- pheno_sub %>% filter(ENV %in% envs)
+
+
+## for loop over environments to predict each environment in turn
+for(e in envs){
+  ## set yield data for the test environment to NA +
+  ### set genotypes in the test environment as NA for all other environments
+  gid.env <- pheno_sub$GID[pheno_sub$ENV %in% e]
+  pheno_train <- pheno_sub |> 
+    mutate(YLD=ifelse(ENV %in% e, NA, YLD),
+           YLD=ifelse(GID %in% gid.env, NA, YLD))
+  ## fit GBLUP model
+  ### add fixed effects of location and year instead of env?
+  fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD", 
+                          K=geno_sub, 
+                          fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
+                          n.core=nb.cores)
+  ## export predicted values
+  df_pred_e <- rbind(df_pred_e, 
+                     data.frame(ENV=e, GID=names(fit$pred), pred=c(fit$pred)))
+}
+## add observed values
+df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
+## correlation within env
+df_pred_e |> group_by(ENV) |>
+  summarize(corP=cor(YLD, pred, use="complete.obs"),
+            n=n_distinct(GID))
+## calculate correlation across environments
+pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
+idx <- which(res.cv00$trial == tri)
+res.cv00$corP[idx] <- pa
+res.cv00$nb.envs[idx] <- length(envs)
+
+## add training/validation set size of the last fold
+res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID))
+
+
+#  }
 ```
 
 
@@ -174,7 +263,7 @@ for(tri in target.pred){
 <!-- ```{r} -->
 <!-- tri=trials_predictathon[1] -->
 
-<!-- df.res <- expand.grid(trial=trials_predictathon, rep=1:nreps, corP=NA, -->
+<!-- res.cv0 <- expand.grid(trial=trials_predictathon, rep=1:nreps, corP=NA, -->
 <!--                       nb.genos.TS=NA, nb.genos.VS=NA) -->
 
 
@@ -182,14 +271,14 @@ for(tri in target.pred){
 <!--   write(paste0("Processing trial: ", tri,"\n"), stdout()) -->
 
 <!--   ## subset GID with geno and pheno data -->
-<!--   gid.geno <- rownames(genoList[[tri]]) -->
+<!--   gid.geno <- rownames(grmList[[tri]]) -->
 <!--   gid <- intersect(gid.geno, pheno$GID) -->
 <!--   length(gid) -->
 <!--   if(length(gid) == 0){ -->
 <!--     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout()) -->
 
 <!--   }else { -->
-<!--     geno_sub <- genoList[[tri]][gid,gid] -->
+<!--     geno_sub <- grmList[[tri]][gid,gid] -->
 <!--     ## TODO subset phenotypes to the program to predict -->
 <!--     pheno_sub <- pheno |> filter(GID %in% gid) -->
 <!--     ## add mean pheno across environments for validation -->
@@ -215,12 +304,12 @@ for(tri in target.pred){
 <!--       } -->
 <!--       ## calculate correlation across folds -->
 <!--       pa <- cor(pheno_avg$YLD, pred_f[match(pheno_avg$GID, names(pred_f))], use="complete.obs") -->
-<!--       idx <- which(df.res$trial == tri & df.res$rep == r) -->
-<!--       df.res$corP[idx] <- pa -->
+<!--       idx <- which(res.cv0$trial == tri & res.cv0$rep == r) -->
+<!--       res.cv0$corP[idx] <- pa -->
 
 <!--       ## add training/validation set size of the last fold -->
-<!--       df.res$nb.genos.TS[idx] <- length(train_gid) -->
-<!--       df.res$nb.genos.VS[idx] <- length(test_gid) -->
+<!--       res.cv0$nb.genos.TS[idx] <- length(train_gid) -->
+<!--       res.cv0$nb.genos.VS[idx] <- length(test_gid) -->
 
 <!--     } -->
 <!--   } -->
@@ -230,10 +319,10 @@ for(tri in target.pred){
 
 <!-- ```{r} -->
 <!-- tri <- trials_predictathon[2] -->
-<!-- gid.geno <- rownames(genoList[[tri]]) -->
+<!-- gid.geno <- rownames(grmList[[tri]]) -->
 <!-- gid <- intersect(gid.geno, pheno$GID) -->
 <!-- length(gid) -->
-<!-- geno_sub <- genoList[[tri]][gid,gid] -->
+<!-- geno_sub <- grmList[[tri]][gid,gid] -->
 <!-- pheno_sub <- pheno |> filter(GID %in% gid) -->
 <!-- pheno_avg <- pheno_sub %>% group_by(GID) %>% summarise(YLD=mean(YLD, na.rm=T)) -->
 
