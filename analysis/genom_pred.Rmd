@@ -169,9 +169,10 @@ for(tri in target.pred){
                                 fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
                                 n.core=nb.cores)
         ## contains the predicted values for all genotypes, including those with observed phenotypes in the training set
+        stopifnot(identical(names(fit$pred), pheno_train$GID))
         pred.all <- data.frame(ENV=pheno_train$ENV, 
                                GID=pheno_train$GID, pred=c(fit$pred))
-        ## export predicted values
+        ## export predicted values for the test environment
         df_pred_e <- rbind(df_pred_e,filter(pred.all, ENV %in% e))
         
       }
@@ -266,23 +267,35 @@ for(tri in target.pred){
                                 fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
                                 n.core=nb.cores)
         ## export predicted values
-        df_pred_e <- rbind(df_pred_e, 
-                           data.frame(ENV=e, GID=names(fit$pred), pred=c(fit$pred)))
+        stopifnot(identical(names(fit$pred), pheno_train$GID))
+        pred.all <- data.frame(ENV=pheno_train$ENV, 
+                               GID=pheno_train$GID, pred=c(fit$pred))
+        ## export predicted values for the test environment
+        df_pred_e <- rbind(df_pred_e,filter(pred.all, ENV %in% e))
       }
       ## add observed values
       df_pred_e <- df_pred_e %>% left_join(pheno_sub, by=c("GID","ENV"))
-      ## correlation within env
-      df_pred_e |> group_by(ENV) |>
-        summarize(corP=cor(YLD, pred, use="complete.obs"),
-                  n=n_distinct(GID))
+     plot(ggplot(df_pred_e, aes(x=YLD, y=pred)) + 
+             geom_point(alpha=0.6, size=1) +  
+             geom_smooth(method="lm", se=FALSE, color="black")+
+             geom_rug(sides="bl")+
+             paletteer::scale_color_paletteer_d("ggthemes::Jewel_Bright") + 
+             ggpubr::stat_cor(method="pearson", size=3)+ 
+             geom_abline(intercept=0, slope=1, color="red")+
+             ggtitle(paste0("Predicted vs. observed values for trial ", tri), 
+                     subtitle=paste0("GBLUP genomic selection method"))+
+             theme_bigstatsr(size.rel=0.8))
+      ## calculate PA in each environment
+      pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
+        summarize(pa=cor(YLD, pred, use="pairwise.complete.obs"))
       ## calculate correlation across environments
-      pa <- cor(df_pred_e$YLD, df_pred_e$pred, use="complete.obs")
+      pa <- round(cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs"),3)
       idx <- which(res.cv00$trial == tri)
-      res.cv00$corP[idx] <- pa
+      res.cv00$corP[idx] <- round(pa,3)
+      res.cv00$wEnv.corP[idx] <- mean(pa.within.env$pa, na.rm=TRUE)
       res.cv00$nb.envs[idx] <- length(envs)
-      
       ## add training/validation set size of the last fold
-      res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID))
+      res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
     }
   }
   
