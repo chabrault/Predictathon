@@ -362,13 +362,21 @@ for(tri in target.pred[4:9]){
         h<-1
         K<-exp(-h*D)
         Kg <- Zg %*% K %*% t(Zg)
-        
-        fit <- BGLR::BGLR(y=pheno_train$YLD,
-                          ETA=list(
-                            env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
-                            g=list(K=Kg, model="RKHS")),
-                          nIter=6000, burnIn=1500,
-                          saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
+        if(length(envs) < 3){
+          fit <- BGLR::BGLR(y=pheno_train$YLD,
+                            ETA=list(
+                              #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                              g=list(K=Kg, model="RKHS")),
+                            nIter=6000, burnIn=1500,
+                            saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
+        } else {
+          fit <- BGLR::BGLR(y=pheno_train$YLD,
+                            ETA=list(
+                              env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                              g=list(K=Kg, model="RKHS")),
+                            nIter=6000, burnIn=1500,
+                            saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
+        }
         
         ## export predicted values
         #stopifnot(identical(names(fit$pred), pheno_train$GID))

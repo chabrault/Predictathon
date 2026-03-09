@@ -19,3 +19,5 @@ data/genotypic/25_Big6_SVREC_SVREC/clean/25_Big6_SVREC_SVREC_combined_GRM.rds
 data/genotypic/YT_Urb_25/clean/YT_Urb_25_focalAccessions_GRM.rds
 data/genotypic/YT_Urb_25/clean/YT_Urb_25_combined_GRM.rds
 data/genotypic/YT_Urb_25/clean/YT_Urb_25_focalAccessions_GRM.rds
+output/temp
+*.dat
