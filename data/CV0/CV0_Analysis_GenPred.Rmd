@@ -78,3 +78,11 @@ need_geno <- focal_acc %>% filter(!(acc_name %in% phenotype_lines))
 write.csv(need_pheno, "need_phenoData.csv")
 write.csv(need_geno, "need_genoData.csv")
 ```
+
+## gBLUP and Environmental Correction
+
+### Environmental Relationship Matrix
+
+```{r}
+
+```
