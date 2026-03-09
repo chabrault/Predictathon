@@ -1,5 +1,5 @@
 ---
-title: "Home"
+title: "Home Predictathon"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
@@ -8,4 +8,8 @@ editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+# Phenotype data 
+
+- [Pull phenotypic data from T3](phenotypic_data.html). In that script, we pull metadata out of the trials related to target trials
+
+- [Analyze phenotypic data](pheno_data_analysis.html). In this script, we load phenotypic data and explore phenotypic data distribution, structure, and check for outliers.

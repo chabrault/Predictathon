@@ -40,14 +40,15 @@ wheat <- getBrAPIConnection("T3/Wheat")
 wheat$login("LukeLeBar", "Imagine2003")
 
 #wheat$get("/germplasm")
+focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC",
+                  "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3",
+                  "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
 ```
 
 ## Accessing Trial Metadata
 
 ```{r}
-focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC",
-                  "OHRWW_2025_SPO", "CornellMaster_2025_McGowan", "24Crk_AY2-3",
-                  "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
+
 
 check_val <- function(x) {
   if (is.null(x) || length(x) == 0) return(NA)
@@ -206,12 +207,13 @@ if(file.exists(p2f)){
   vars_rm <- "season"
   
   search <- try(wheat$search("/observations", body=list(
-    germplasmDbIds = c(focal_ids), 
-    observationVariableDbIds = list("84527"),
-    studyDbIds=all_trials$id,
-    page="all",
+    #germplasmDbIds = c(focal_ids), 
+    observationVariableDbIds = list(84527),
+    studyDbIds=all_trials$studyDbId,
+    # page="all",
     pageSize=100000
   )))
+  
   
   results <- search$combined_data
   results <- results %>%
@@ -235,7 +237,62 @@ if(!"location" %in% colN){
     mutate(studyDbId = as.character(studyDbId)) |> 
     left_join(all_trials, by=c("studyDbId"="studyDbId"))
   ## export all accessions yield with trial metadata
-  write.table(results, p2f, sep=",", row.names=F, quote=F)
+  write.table(results, p2f, sep=",", row.names=F, quote=TRUE, col.names=TRUE)
 }
+#rm(all_trials_list, focal_acc, focal_metadata)
 ```
+
+# Combine and filter phenotypic data from J-L Jannink
+
+For each target trial, select phenotypic data for the genotyped lines and add trial metadata (location, start/end dates) to it. Then combine phenotypic data from all trials into one file.
+
+```{r}
+for(tri in focal_trials){
+  #tri=focal_trials[1]
+  all.files <- list.files(here("data","phenotypic",tri))
+  ## for now, select all phenotype files
+  sel.files <- all.files[grepl("phenotypes", all.files)]
+  p2fs <- paste0(here("data","phenotypic",tri),"/",sel.files)
+  dat.tri <- map_dfr(p2fs, fread)
+  ap(dat.tri)
+  
+  ## add the trial location & year
+  p2f.met <- paste0(here("data","phenotypic",tri),"/",grep("metadata", all.files, value=T))
+  trial.info <- fread(p2f.met, header=T, sep=",")
+  
+  ## load combined geno for this trial
+  p2f <- here("data","genotypic", tri,"clean",
+              paste0(tri,"_combined_GRM.rds"))
+  geno.tri <- readRDS(p2f)
+  gid.geno.tri <- rownames(geno.tri)
+  length(gid.geno.tri)
+  length(intersect(unique(dat.tri$germplasm_name), gid.geno.tri))
+  
+  ## select phenotypic data from the genotyped inds
+  dat.tri.sel <- dat.tri |> 
+    filter(germplasm_name %in% gid.geno.tri) |> 
+    left_join(trial.info |> 
+                select(study_db_id,location_name, study_name,program_name),
+              by=c("study_db_id")) |> 
+    rename(year=season)
+  
+  write(paste0("Trial ", tri, ": ", dim(dat.tri.sel)[1], " phenotypic records for ",
+               length(unique(dat.tri.sel$germplasm_name)), " genotyped lines"), stdout())
+  p2f.save <- here("data","phenotypic",tri,
+              paste0(tri,"_pheno_genoSelected.csv"))
+  write.table(dat.tri.sel, p2f.save, sep=",", row.names=F, quote=T, col.names=TRUE)
+}
+
+## combine phenotypic data into one list
+pheno.all <- map_dfr(focal_trials, function(tri){
+  p2f <- here("data","phenotypic",tri,
+              paste0(tri,"_pheno_genoSelected.csv"))
+  dat <- fread(p2f, header=T, sep=",") |> 
+    mutate(trial.target=tri)
+  return(dat)
+})
+write.table(pheno.all, here("data","phenotypic","allTrials_pheno_genoSelected.csv"), 
+            sep=",", row.names=F, quote=T, col.names=TRUE)
+```
+For 24Crk_AY2-3, we have less lines than with the initial phenotypic data file, for all other trials we have more genotypes.
 

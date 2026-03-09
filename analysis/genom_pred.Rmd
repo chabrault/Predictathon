@@ -91,13 +91,17 @@ Small number of genotypes for "AWY1_DVPWA_2024"
 
 ```{r load_pheno_trials}
 p2f <- here("data","phenotypic","allAccessions_yield_raw.csv")
+p2f <- here("data","phenotypic","allTrials_pheno_genoSelected.csv")
+
 file.mtime(p2f)
 pheno_init <- fread(p2f)
 dim(pheno_init)
 head(pheno_init)
 str(pheno_init)
 pheno <- pheno_init |> 
-  rename(GID=germplasmName, YLD=value, PROG=focal_trial, LOC=location, YEAR=year) |> 
+  rename(GID=germplasm_name, YLD=value, PROG=program_name, LOC=location_name, YEAR=year) |>
+  #rename(GID=germplasmName, YLD=value, PROG=focal_trial, LOC=location, YEAR=year) |> 
+  mutate(LOC=gsub(", [A-Z]{2}","",LOC)) |> 
   mutate(ENV=paste0(LOC,"_",YEAR)) |>
   select(GID, PROG, LOC, YEAR, ENV, YLD) |> 
   group_by(GID, LOC, YEAR, ENV) |>
@@ -109,7 +113,7 @@ head(pheno)
 
 ```{r}
 grmList.cmon <- purrr::map(grmList, \(x){
-  int <- intersect(rownames(x), pheno$GID)
+  int <- intersect(rownames(x), unique(pheno$GID))
   return(x[int,int])
 })
 lapply(grmList.cmon, nrow)
@@ -132,7 +136,7 @@ res.cv0 <- expand.grid(method="GBLUP", scenario="CV0",
                        trial=target.pred,  corP=NA, 
                        wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
 
-for(tri in target.pred[4:9]){
+for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stdout())
   
   ## subset GID with geno and pheno data
@@ -324,7 +328,7 @@ res.cv0 <- expand.grid(method="RKHS", scenario="CV0",
                        trial=target.pred,  corP=NA, 
                        wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
 
-for(tri in target.pred[4:9]){
+for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stdout())
   
   ## subset GID with geno and pheno data
