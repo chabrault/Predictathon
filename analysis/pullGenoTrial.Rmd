@@ -974,7 +974,7 @@ for(tri in trials_predictathon){
   ## use custom function from useful_functions.R
   geno <- format_curate_vcf(vcf.p2f=vcf.p2f,
                             p2f.export.vcf=p2f.export.vcf,
-                            remove.chrUkn=FALSE,
+                            remove.chrUkn=TRUE,
                             check.mrk.dups=TRUE,
                             remove.nonPolyMrk=FALSE,
                             tresh.heterozygous=NULL,
@@ -1012,6 +1012,7 @@ for(tri in trials_predictathon){
   
 }
 ```
+
 
 
 <!-- For the first trial (AWY1_DVPWA_2024), there is only one genotyping protocol (291 = ThermoFisher AgriSeq 5K), let's download a VCF for this one. -->
