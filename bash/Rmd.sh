@@ -6,8 +6,8 @@
 #SBATCH --tmp=100g
 #SBATCH --mail-type=END
 #SBATCH --mail-user=cbrault@umn.edu
-#SBATCH --output=GRM.Predictathon
-#SBATCH --job-name=GRM.Predictathon
+#SBATCH --output=GP.pred
+#SBATCH --job-name=GP.pred
 
 
 conda activate r_env
@@ -19,6 +19,6 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
 
-R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/combine_GRM.Rmd')"
-#R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/genom_pred.Rmd')"
+#R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/combine_GRM.Rmd')"
+R -e "rmarkdown::render('/users/7/cbrault/Predictathon/analysis/genom_pred.Rmd')"
 
