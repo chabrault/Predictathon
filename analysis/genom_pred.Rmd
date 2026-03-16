@@ -141,14 +141,14 @@ obs.pred.all <- data.frame()
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
-
+  
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-
+    
   }else {
     ## subset pheno and geno from the program to predict
     geno_sub <- grmList[[tri]][gid,gid]
@@ -184,7 +184,7 @@ for(tri in target.pred){
                                GID=names(fit$pred), pred=c(fit$pred))
         ## export predicted values for the test environment
         df_pred_e <- rbind(df_pred_e,filter(pred.all, ENV %in% e))
-
+        
       }
       ## add observed values
       df_pred_e <- df_pred_e |> left_join(pheno_sub, by=c("GID","ENV")) %>% 
@@ -192,7 +192,7 @@ for(tri in target.pred){
                scenario="CV0",
                GP.method="GBLUP")
       obs.pred.all <- rbind(obs.pred.all, df_pred_e)
-
+      
       plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) +
              geom_point(alpha=0.6, size=1) +
              geom_smooth(method="lm", se=FALSE)+
@@ -227,6 +227,7 @@ saveRDS(obs.pred.all, file=here("output","GP_GBLUP_CV0_combined-GRM_common-pheno
 ```
 
 
+
 ## CV00
 
 Objective: predict unknown genotypes in unknown trials in cross-validation.
@@ -240,14 +241,14 @@ obs.pred.all <- data.frame()
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
-
+  
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-
+    
   }else {
     ## subset GID with geno and pheno data
     gid.geno <- rownames(grmList[[tri]])
@@ -257,7 +258,7 @@ for(tri in target.pred){
     geno_sub <- grmList[[tri]][gid,gid]
     pheno_sub <- pheno |> filter(GID %in% gid)
     df_pred_e <- data.frame()
-
+    
     ## select environments with more than 30 obs
     envs <- pheno_sub %>%
       group_by(ENV) %>% summarize(n=n(),.groups="drop") %>%
@@ -267,7 +268,7 @@ for(tri in target.pred){
       write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
       next
     } else {
-
+      
       ## for loop over environments to predict each environment in turn
       for(e in envs){
         ## set yield data for the test environment to NA +
@@ -323,7 +324,7 @@ for(tri in target.pred){
       res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
     }
   }
-
+  
 }
 print_table(res.cv00)
 write.table(res.cv00, here("output","GP_GBLUP_CV00_combined-GRM_common-pheno.tsv"),
