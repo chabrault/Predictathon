@@ -1,13 +1,13 @@
 #!/bin/bash -l
-#SBATCH --time=36:00:00 
+#SBATCH --time=48:00:00 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=100g
-#SBATCH --tmp=100g
+#SBATCH --mem=150g
+#SBATCH --tmp=150g
 #SBATCH --mail-type=END
 #SBATCH --mail-user=cbrault@umn.edu
-#SBATCH --output=GP.pred
-#SBATCH --job-name=GP.pred
+#SBATCH --output=GP.pred.RKHS.CV00
+#SBATCH --job-name=GP.pred.RKHS.CV00
 
 
 conda activate r_env

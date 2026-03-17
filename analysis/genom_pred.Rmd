@@ -241,14 +241,14 @@ obs.pred.all <- data.frame()
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
-  
+
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-    
+
   }else {
     ## subset GID with geno and pheno data
     gid.geno <- rownames(grmList[[tri]])
@@ -258,7 +258,7 @@ for(tri in target.pred){
     geno_sub <- grmList[[tri]][gid,gid]
     pheno_sub <- pheno |> filter(GID %in% gid)
     df_pred_e <- data.frame()
-    
+
     ## select environments with more than 30 obs
     envs <- pheno_sub %>%
       group_by(ENV) %>% summarize(n=n(),.groups="drop") %>%
@@ -268,7 +268,7 @@ for(tri in target.pred){
       write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
       next
     } else {
-      
+
       ## for loop over environments to predict each environment in turn
       for(e in envs){
         ## set yield data for the test environment to NA +
@@ -324,7 +324,7 @@ for(tri in target.pred){
       res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
     }
   }
-  
+
 }
 print_table(res.cv00)
 write.table(res.cv00, here("output","GP_GBLUP_CV00_combined-GRM_common-pheno.tsv"),
@@ -335,117 +335,120 @@ saveRDS(obs.pred.all, file=here("output","GP_GBLUP_CV00_combined-GRM_common-phen
 
 # RKHS
 
+Examples of BGLR models: https://github.com/gdlc/BGLR-R/blob/master/inst/md/RKHS.md
+
+
 ## CV0
 
 ```{r rkhs_cv0}
-dir.create(here("output","temp"))
-res.cv0 <- expand.grid(method="RKHS", scenario="CV0",
-                       trial=target.pred,  corP=NA, 
-                       wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
-obs.pred.all <- data.frame()
-
-for(tri in target.pred){
-  write(paste0("Processing trial: ", tri,"\n"), stderr())
-  
-  ## subset GID with geno and pheno data
-  gid.geno <- rownames(grmList[[tri]])
-  gid <- intersect(gid.geno, pheno$GID)
-  length(gid)
-  if(length(gid) == 0){
-    write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-    
-  }else {
-    ## subset pheno and geno from the program to predict
-    geno_sub <- grmList[[tri]][gid,gid]
-    pheno_sub <- pheno |> filter(GID %in% gid)
-    ## select environments with more than 30 obs
-    envs <- pheno_sub %>% 
-      group_by(ENV) %>% summarize(n=n(),.groups="drop") %>% 
-      filter(n > 30) %>% pull(ENV)
-    #pheno_sub <- pheno_sub %>% filter(ENV %in% envs)
-    if(length(envs) == 0){
-      write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
-      next
-    } else {
-      df_pred_e <- data.frame()
-      ## for loop over environments to predict each environment in turn
-      for(e in envs){
-        ## set yield data for the test environment to NA
-        pheno_train <- pheno_sub |> 
-          mutate(YLD=ifelse(ENV %in% e, NA, YLD))
-        pheno_train <- as.data.frame(pheno_train[match(gid, pheno_train$GID),])
-        stopifnot(identical(rownames(geno_sub), pheno_train$GID))
-        ## fit  BGLR RKHS
-        Zg <- model.matrix(~GID, pheno_train)
-        D<-as.matrix(dist(geno_sub,method="euclidean"))^2
-        D<-D/mean(D)
-        h<-1
-        K<-exp(-h*D)
-        Kg <- Zg %*% K %*% t(Zg)
-        ## W: envt cov
-        ## Zw = model.matrix(~ENV, pheno_train)
-        ## Kw <- Zw %*% W %*% t(Zw)
-        if(length(envs) < 3){
-          fit <- BGLR::BGLR(y=pheno_train$YLD,
-                            ETA=list(
-                              #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
-                              g=list(K=Kg, model="RKHS")),
-                            nIter=6000, burnIn=1500,
-                            saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
-        } else {
-          fit <- BGLR::BGLR(y=pheno_train$YLD,
-                            ETA=list(
-                              env=list(~factor(LOC)+factor(YEAR),
-                                       data=pheno_train, model="BRR"),
-                              #e=list(K=Kw, model="RKHS"),
-                              g=list(K=Kg, model="RKHS")),
-                            nIter=6000, burnIn=1500,
-                            saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
-        }
-        
-        ## export predicted values
-        #stopifnot(identical(names(fit$pred), pheno_train$GID))
-        pred.all <- data.frame(ENV=pheno_train$ENV, 
-                               GID=pheno_train$GID, pred=c(fit$yHat))
-        ## export predicted values for the test environment
-        df_pred_e <- rbind(df_pred_e,filter(pred.all, ENV %in% e))
-      }
-      ## add observed values
-      df_pred_e <- df_pred_e |> left_join(pheno_sub, by=c("GID","ENV")) %>% 
-        mutate(target.trial=tri,
-               scenario="CV0",
-               GP.method="RKHS")
-      obs.pred.all <- rbind(obs.pred.all, df_pred_e)
-      ## plot obs vs. pred
-      plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) + 
-             geom_point(alpha=0.6, size=1) +  
-             geom_smooth(method="lm", se=FALSE)+
-             geom_rug(sides="bl")+
-             #paletteer::scale_color_paletteer_d("ggthemes::Jewel_Bright") + 
-             ggpubr::stat_cor(method="pearson", size=3)+ 
-             geom_abline(intercept=0, slope=1, color="grey", linetype="dashed")+
-             ggtitle(paste0("Predicted vs. observed values for trial ", tri), 
-                     subtitle=paste0("GBLUP genomic selection method"))+
-             theme_bigstatsr(size.rel=0.8))
-      ## calculate PA in each environment
-      pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
-        summarize(pa=cor(YLD, pred, use="pairwise.complete.obs")) %>% 
-        as.data.frame()
-      ## calculate correlation across environments
-      pa <- round(cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs"),3)
-      idx <- which(res.cv0$trial == tri)
-      res.cv0$corP[idx] <- round(pa,3)
-      res.cv0$wEnv.corP[idx] <- round(mean(pa.within.env$pa, na.rm=TRUE),3)
-      res.cv0$nb.envs[idx] <- length(envs)
-      ## add training/validation set size of the last fold
-      res.cv0$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
-    }
-  }
-}
-print_table(res.cv0)
-write.table(res.cv0, here("output","GP_RKHS_CV0_combined-GRM_common-pheno.tsv"),
-            sep="\t", row.names=FALSE)
-saveRDS(obs.pred.all, file=here("output","GP_RKHS_CV0_combined-GRM_common-pheno_obs-pred.rds"))
+# dir.create(here("output","temp"))
+# res.cv0 <- expand.grid(method="RKHS", scenario="CV0",
+#                        trial=target.pred,  corP=NA, 
+#                        wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
+# obs.pred.all <- data.frame()
+# 
+# for(tri in target.pred){
+#   write(paste0("Processing trial: ", tri,"\n"), stderr())
+#   
+#   ## subset GID with geno and pheno data
+#   gid.geno <- rownames(grmList[[tri]])
+#   gid <- intersect(gid.geno, pheno$GID)
+#   length(gid)
+#   if(length(gid) == 0){
+#     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
+#     
+#   }else {
+#     ## subset pheno and geno from the program to predict
+#     geno_sub <- grmList[[tri]][gid,gid]
+#     pheno_sub <- pheno |> filter(GID %in% gid)
+#     ## select environments with more than 30 obs
+#     envs <- pheno_sub %>% 
+#       group_by(ENV) %>% summarize(n=n(),.groups="drop") %>% 
+#       filter(n > 30) %>% pull(ENV)
+#     #pheno_sub <- pheno_sub %>% filter(ENV %in% envs)
+#     if(length(envs) == 0){
+#       write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
+#       next
+#     } else {
+#       df_pred_e <- data.frame()
+#       ## for loop over environments to predict each environment in turn
+#       for(e in envs){
+#         ## set yield data for the test environment to NA
+#         pheno_train <- pheno_sub |> 
+#           mutate(YLD=ifelse(ENV %in% e, NA, YLD))
+#         pheno_train <- as.data.frame(pheno_train[match(gid, pheno_train$GID),])
+#         stopifnot(identical(rownames(geno_sub), pheno_train$GID))
+#         ## fit  BGLR RKHS
+#         Zg <- model.matrix(~GID, pheno_train)
+#         D<-as.matrix(dist(geno_sub,method="euclidean"))^2
+#         D<-D/mean(D)
+#         h<-1
+#         K<-exp(-h*D)
+#         Kg <- Zg %*% K %*% t(Zg)
+#         ## W: envt cov
+#         ## Zw = model.matrix(~ENV, pheno_train)
+#         ## Kw <- Zw %*% W %*% t(Zw)
+#         if(length(envs) < 3){
+#           fit <- BGLR::BGLR(y=pheno_train$YLD,
+#                             ETA=list(
+#                               #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+#                               g=list(K=Kg, model="RKHS")),
+#                             nIter=6000, burnIn=1500,
+#                             saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
+#         } else {
+#           fit <- BGLR::BGLR(y=pheno_train$YLD,
+#                             ETA=list(
+#                               env=list(~factor(LOC)+factor(YEAR),
+#                                        data=pheno_train, model="BRR"),
+#                               #e=list(K=Kw, model="RKHS"),
+#                               g=list(K=Kg, model="RKHS")),
+#                             nIter=6000, burnIn=1500,
+#                             saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
+#         }
+#         
+#         ## export predicted values
+#         #stopifnot(identical(names(fit$pred), pheno_train$GID))
+#         pred.all <- data.frame(ENV=pheno_train$ENV, 
+#                                GID=pheno_train$GID, pred=c(fit$yHat))
+#         ## export predicted values for the test environment
+#         df_pred_e <- rbind(df_pred_e,filter(pred.all, ENV %in% e))
+#       }
+#       ## add observed values
+#       df_pred_e <- df_pred_e |> left_join(pheno_sub, by=c("GID","ENV")) %>% 
+#         mutate(target.trial=tri,
+#                scenario="CV0",
+#                GP.method="RKHS")
+#       obs.pred.all <- rbind(obs.pred.all, df_pred_e)
+#       ## plot obs vs. pred
+#       plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) + 
+#              geom_point(alpha=0.6, size=1) +  
+#              geom_smooth(method="lm", se=FALSE)+
+#              geom_rug(sides="bl")+
+#              #paletteer::scale_color_paletteer_d("ggthemes::Jewel_Bright") + 
+#              ggpubr::stat_cor(method="pearson", size=3)+ 
+#              geom_abline(intercept=0, slope=1, color="grey", linetype="dashed")+
+#              ggtitle(paste0("Predicted vs. observed values for trial ", tri), 
+#                      subtitle=paste0("GBLUP genomic selection method"))+
+#              theme_bigstatsr(size.rel=0.8))
+#       ## calculate PA in each environment
+#       pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
+#         summarize(pa=cor(YLD, pred, use="pairwise.complete.obs")) %>% 
+#         as.data.frame()
+#       ## calculate correlation across environments
+#       pa <- round(cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs"),3)
+#       idx <- which(res.cv0$trial == tri)
+#       res.cv0$corP[idx] <- round(pa,3)
+#       res.cv0$wEnv.corP[idx] <- round(mean(pa.within.env$pa, na.rm=TRUE),3)
+#       res.cv0$nb.envs[idx] <- length(envs)
+#       ## add training/validation set size of the last fold
+#       res.cv0$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
+#     }
+#   }
+# }
+# print_table(res.cv0)
+# write.table(res.cv0, here("output","GP_RKHS_CV0_combined-GRM_common-pheno.tsv"),
+#             sep="\t", row.names=FALSE)
+# saveRDS(obs.pred.all, file=here("output","GP_RKHS_CV0_combined-GRM_common-pheno_obs-pred.rds"))
 ```
 
 
@@ -509,7 +512,8 @@ for(tri in target.pred){
         
         fit <- BGLR::BGLR(y=pheno_train$YLD,
                           ETA=list(
-                            env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                            #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                            #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="FIXED"),
                             g=list(K=Kg, model="RKHS")),
                           nIter=6000, burnIn=1500,
                           saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_env-",e)))
@@ -528,15 +532,15 @@ for(tri in target.pred){
                GP.method="RKHS")
       obs.pred.all <- rbind(obs.pred.all, df_pred_e)
       ## plot obs. vs pred
-      plot(ggplot(df_pred_e, aes(x=YLD, y=pred)) + 
+      plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) + 
              geom_point(alpha=0.6, size=1) +  
              geom_smooth(method="lm", se=FALSE, color="black")+
              geom_rug(sides="bl")+
              #paletteer::scale_color_paletteer_d("ggthemes::Jewel_Bright") + 
              ggpubr::stat_cor(method="pearson", size=3)+ 
-             geom_abline(intercept=0, slope=1, color="red")+
-             ggtitle(paste0("Predicted vs. observed values for trial ", tri), 
-                     subtitle=paste0("GBLUP genomic selection method"))+
+             geom_abline(intercept=0, slope=1, color="grey",linetype="dashed")+
+             ggtitle(paste0("Obs. vs. pred. values for trial ", tri), 
+                     subtitle=paste0("RKHS genomic selection method"))+
              theme_bigstatsr(size.rel=0.8))
       ## calculate PA in each environment
       pa.within.env <- df_pred_e %>% group_by(ENV) %>% 
