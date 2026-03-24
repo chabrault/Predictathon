@@ -102,7 +102,7 @@ pheno <- pheno_init |>
   #rename(GID=germplasmName, YLD=value, PROG=focal_trial, LOC=location, YEAR=year) |> 
   mutate(LOC=gsub(", [A-Z]{2}","",LOC)) |> 
   mutate(ENV=paste0(LOC,"_",YEAR)) |>
-  select(GID, PROG, LOC, YEAR, ENV, YLD) |> 
+  dplyr::select(GID, PROG, LOC, YEAR, ENV, YLD) |> 
   group_by(GID, LOC, YEAR, ENV) |>
   summarise(YLD=mean(YLD, na.rm=TRUE), .groups="drop") 
 head(pheno)
