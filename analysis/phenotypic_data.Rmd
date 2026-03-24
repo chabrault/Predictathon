@@ -1,6 +1,6 @@
 ---
 title: "LeBar_Predictathon"
-author: "Luke LeBar"
+author: "Luke LeBar, Charlotte Brault"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -36,8 +36,6 @@ rm(list=ls())
 
 wheat <- createBrAPIConnection("wheat.triticeaetoolbox.org", is_breedbase=TRUE)
 wheat <- getBrAPIConnection("T3/Wheat")
-
-wheat$login("LukeLeBar", "Imagine2003")
 
 #wheat$get("/germplasm")
 focal_trials <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS", "25_Big6_SVREC_SVREC",

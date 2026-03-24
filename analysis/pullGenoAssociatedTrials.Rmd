@@ -215,23 +215,3 @@ for(prog in focal_prg){
   }
 }
 ```
-
-# Combine all vcf files into one per program
-
-## Load vcf files
-
-```{r}
-#TODO
-```
-
-## Merge into one big file
-
-```{r}
-#TODO
-```
-
-## Format and impute
-
-```{r}
-#TODO
-```

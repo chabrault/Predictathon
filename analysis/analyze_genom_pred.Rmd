@@ -74,6 +74,14 @@ df_pred_e |> filter(target.trial %in% "24Crk_AY2-3", YEAR %in% 2023) |>
   ggtitle(paste0("Predicted vs. observed values for trial ", tri),
           subtitle=paste0("GBLUP genomic selection method"))+
   theme_bigstatsr(size.rel=0.8)
+
+
+```
+
+## CV00
+
+```{r}
+
 ```
 
 
