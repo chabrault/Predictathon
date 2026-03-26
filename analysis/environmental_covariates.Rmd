@@ -25,7 +25,7 @@ suppressPackageStartupMessages(library(nasapower))
 ```{r}
 #setwd("C:/Users/lukel/OneDrive/Documents/GitHub/Predictathon/data")
 here::i_am("analysis/environmental_covariates.Rmd")
-trials <- read.csv(here("data","allTrials_metadata.csv"))
+trials <- read.csv(here("analysis", "trial_list.csv"))
 ```
 
 ## Geocode Locations
@@ -41,32 +41,35 @@ if(any(is.na(trials_geocoded$latitude))) {
 ## Retrieve Environmental Data from NASA
 
 ```{r}
-fetch_weather <- function(lat, lon, year) {
-  if(is.na(lat) | is.na(lon)) return(NULL)
-  start_date <- paste0(year, "-03-01")
-  end_date   <- paste0(year, "-09-30")
+library(dplyr)
+library(purrr)
+library(daymetr)
+
+fetch_daymet <- function(lat, lon, year) {
   
-  # Fetch data using nasapower
-  # T2M = Temperature at 2 meters (C)
-  # PRECTOTCORR = Bias-corrected precipitation (mm)
-  # ALLSKY_SFC_SW_DWN = Downward Shortwave Radiation (MJ/m^2/day)
-  daily_data <- get_power(
-    community = "ag",
-    lonlat = c(lon, lat),
-    pars = c("T2M", "PRECTOTCORR", "ALLSKY_SFC_SW_DWN"),
-    dates = c(start_date, end_date),
-    temporal_api = "daily"
+  # Notice we are using the lowercase 'year' here to match the argument above
+  dl <- download_daymet(
+    site = "Site",  
+    lat = lat, 
+    lon = lon, 
+    start = year,   
+    end = year,     
+    internal = TRUE, 
+    silent = TRUE 
   )
-  return(daily_data)
+  
+  return(dl$data)
 }
-print("Fetching environmental covariates from NASA...")
-env_results <- trials_geocoded %>%
-  mutate(
-    weather_data = pmap(list(latitude, longitude, year), fetch_weather)
-  )
+
+# 2. Your Pipeline (Uppercase 'YEAR' is correct here because it's your column name)
+trials_geocoded <- trials_geocoded %>%
+  mutate(weather_data = pmap(list(latitude, longitude, YEAR), fetch_daymet))
+
+
 trials_env <- env_results %>%
-  tidyr::unnest(weather_data) %>%
-  select(studyDbId, location, year, latitude, longitude, YYYYMMDD, T2M, PRECTOTCORR, ALLSKY_SFC_SW_DWN)
+  tidyr::unnest(weather_data, names_repair = "unique")
+
+trials_env <- trials_env[,-10]
 
 trials_env
 

@@ -7,6 +7,7 @@ date: '`r format(Sys.time(), "%d %B, %Y")`'
 ---
 
 ```{r setup, include=FALSE}
+rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE,
                       engine.opts = list(bash = "-l"))
 ```
@@ -29,6 +30,8 @@ suppressPackageStartupMessages(library(doSNOW)) # for creating cluster
 suppressPackageStartupMessages(library(purrr)) # list handling
 suppressPackageStartupMessages(library(bigstatsr)) # ggplot theme
 suppressPackageStartupMessages(library(ggbeeswarm)) # ggplot geom_quasirandom
+library(stringr)
+library(tidyverse)
 #devtools::install_github("chabrault/HRSWGS")
 #suppressPackageStartupMessages(library(HRSWGS)) ## custom functions
 
@@ -99,13 +102,15 @@ head(pheno_init)
 str(pheno_init)
 pheno <- pheno_init |> 
   rename(GID=germplasm_name, YLD=value, PROG=program_name, LOC=location_name, YEAR=year) |>
-  #rename(GID=germplasmName, YLD=value, PROG=focal_trial, LOC=location, YEAR=year) |> 
-  mutate(LOC=gsub(", [A-Z]{2}","",LOC)) |> 
-  mutate(ENV=paste0(LOC,"_",YEAR)) |>
-  dplyr::select(GID, PROG, LOC, YEAR, ENV, YLD) |> 
-  group_by(GID, LOC, YEAR, ENV) |>
-  summarise(YLD=mean(YLD, na.rm=TRUE), .groups="drop") 
+  mutate(STATE = str_extract(LOC, "[A-Z]{2}$")) |> 
+  mutate(LOC = gsub(", [A-Z]{2}", "", LOC)) |> 
+  mutate(ENV = paste0(LOC, "_", YEAR)) |>
+  dplyr::select(GID, PROG, LOC, STATE, YEAR, ENV, YLD) |> 
+  group_by(GID, LOC, STATE, YEAR, ENV) |>
+  summarise(YLD = mean(YLD, na.rm=TRUE), .groups = "drop")
 head(pheno)
+
+pheno <- pheno %>% filter(YEAR >= 2020)
 ```
 
 ## Common genotypes
@@ -219,7 +224,342 @@ write.table(res.cv0, here("output","GP_GBLUP_CV0_combined-GRM_common-pheno.tsv")
 saveRDS(obs.pred.all, file=here("output","GP_GBLUP_CV0_combined-GRM_common-pheno_obs-pred.rds"))
 ```
 
+## CV0 w/ Environmental Relationship Matrix
 
+### Preparing He
+
+```{r}
+trial_env <- read.csv(here("analysis", "environmental_covariates.csv"))
+trial_env <- trial_env %>% filter(yday >= 60 & yday <= 245)
+trial_env <- trial_env %>% filter(YEAR >= 2020)
+env_data <- trial_env[,c(11:17)]
+ec_scaled <- scale(env_data) # remove Env name column before scaling
+ec_scaled <- as.data.frame(ec_scaled)
+ec_scaled$ENV <- trial_env$ENV
+ec_scaled$DATE <- trial_env$yday
+ec_scaled$LOC <- trial_env$location
+
+ec_scaled <- unique(ec_scaled)
+
+ec_scaled <- ec_scaled %>% pivot_wider(
+  names_from = DATE,
+  values_from = c("dayl..s.", "prcp..mm.day.", "srad..W.m.2.", "swe..kg.m.2.", "tmax..deg.c.", "tmin..deg.c.", "vp..Pa.")
+)
+
+He <- ec_scaled
+He<- He[,-c(1,2)]
+rownames(He) = ec_scaled$ENV
+
+He <- cor(t(He))
+```
+
+### CV0 Predictions ggBLUP
+
+```{r}
+pheno$ENV <- gsub("Saginaw Valley Research and Extension Center", "Frankenmuth", pheno$ENV)
+pheno <- pheno %>% filter(pheno$ENV %in% rownames(He))
+
+res.cv0 <- expand.grid(method="GBLUP_GxE", scenario="CV0",
+                       trial=target.pred,  corP=NA,
+                       wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
+obs.pred.all <- data.frame()
+
+for(tri in target.pred){
+  write(paste0("Processing trial: ", tri,"\n"), stderr())
+  
+  ## subset GID with geno and pheno data
+  gid.geno <- rownames(grmList[[tri]])
+  gid <- intersect(gid.geno, pheno$GID)
+  length(gid)
+  
+  if(length(gid) == 0){
+    write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
+    
+  } else {
+    ## subset pheno and geno from the program to predict
+    geno_sub <- grmList[[tri]][gid,gid]
+    pheno_sub <- pheno |> filter(GID %in% gid)
+    
+    ## select environments with more than 30 obs
+    envs <- pheno_sub %>%
+      group_by(ENV) %>% summarize(n=n(),.groups="drop") %>%
+      filter(n > 30) %>% pull(ENV)
+    envs <- intersect(envs, rownames(He))
+    
+    if(length(envs) == 0){
+      write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
+      next
+    } else {
+      
+      # Subset the Environmental matrix for the current environments
+      He_sub <- He[envs, envs]
+      
+      # Compute Kronecker product: K_ge = He (x) Kg
+      K_ge <- kronecker(He_sub, geno_sub)
+      
+      # Create GE_ID names. The Kronecker order matches rep(envs, each) / rep(gids, times)
+      # Using ":::" as a separator to prevent bugs if GID or ENV names contain underscores
+      ge_names <- paste(rep(rownames(He_sub), each = length(gid)),
+                        rep(rownames(geno_sub), times = length(rownames(He_sub))), sep = ":::")
+      
+      rownames(K_ge) <- colnames(K_ge) <- ge_names
+      
+      # Add the matching GE_ID to the phenotype dataframe
+      pheno_sub <- pheno_sub %>% mutate(GE_ID = paste(ENV, GID, sep = ":::"))
+
+      
+      df_pred_e <- data.frame()
+      
+        ## for loop over environments to predict each environment in turn
+      for(e in envs){
+        ## set yield data for the test environment to NA
+        pheno_train <- pheno_sub |>
+          mutate(YLD=ifelse(ENV %in% e, NA, YLD)) %>%
+          as.data.frame()
+        pheno_train$GE_ID <- as.character(pheno_train$GE_ID)
+        valid_matrix_ids <- rownames(K_ge)
+        pheno_train <- pheno_train %>% filter(GE_ID %in% valid_matrix_ids)
+      
+        if(nrow(pheno_train) == 0){
+          write("Error: All records were filtered out! Check for trailing spaces or missing environments in 'He'.", stdout())
+          next
+        }
+        # ==========================================================
+      
+        ## fit GBLUP model using the combined GxE matrix
+        fit <- rrBLUP::kin.blup(data=pheno_train, 
+                                geno="GE_ID",       # Target the new combined ID column
+                                pheno="YLD",
+                                K=K_ge,             # Use the Kronecker GxE matrix
+                                fixed=c("LOC","YEAR"),
+                                n.core=nb.cores)
+        
+        # Parse the predicted GE_IDs back into ENV and GID for plotting/stats
+        pred_names <- names(fit$pred)
+        pred_env <- sub(":::.*", "", pred_names)     # Extract ENV before separator
+        pred_gid <- sub(".*:::", "", pred_names)     # Extract GID after separator
+        
+        pred.all <- data.frame(ENV = pred_env,
+                               GID = pred_gid, 
+                               pred = c(fit$pred))
+        
+        ## export predicted values for the test environment
+        df_pred_e <- rbind(df_pred_e, filter(pred.all, ENV %in% e))
+      }
+      
+      ## add observed values
+      df_pred_e <- df_pred_e |> left_join(pheno_sub, by=c("GID","ENV")) %>% 
+        mutate(target.trial=tri,
+               scenario="CV0",
+               GP.method="GBLUP_GxE")
+      
+      obs.pred.all <- rbind(obs.pred.all, df_pred_e)
+      
+      plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) +
+             geom_point(alpha=0.6, size=1) +
+             geom_smooth(method="lm", se=FALSE)+
+             geom_rug(sides="bl")+
+             ggpubr::stat_cor(method="pearson", size=3)+
+             geom_abline(intercept=0, slope=1, color="grey", linetype="dashed")+
+             ggtitle(paste0("Predicted vs. observed values for trial ", tri),
+                     subtitle=paste0("GBLUP GxE genomic selection method"))+
+             theme_bigstatsr(size.rel=0.8))
+      
+      ## calculate PA in each environment
+      pa.within.env <- df_pred_e %>% group_by(ENV) %>%
+        summarize(pa=cor(YLD, pred, use="pairwise.complete.obs")) %>%
+        as.data.frame()
+      
+      ## calculate correlation across environments
+      pa <- round(cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs"), 3)
+      idx <- which(res.cv0$trial == tri)
+      res.cv0$corP[idx] <- round(pa, 3)
+      res.cv0$wEnv.corP[idx] <- round(mean(pa.within.env$pa, na.rm=TRUE), 3)
+      res.cv0$nb.envs[idx] <- length(envs)
+      
+      ## add training/validation set size of the last fold
+      res.cv0$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
+    }
+  }
+}
+print_table(res.cv0)
+write.table(res.cv0, here("output","GP_GBLUP_GxE_CV0_combined-GRM_common-pheno.tsv"),
+            sep="\t", row.names=FALSE)
+
+saveRDS(obs.pred.all, file=here("output","GP_GBLUP_GxE_CV0_combined-GRM_common-pheno_obs-pred.rds"))
+```
+
+### CV0 Predictions Sommer
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(sommer) # Replaces rrBLUP
+
+# Ensure you have your 'He' matrix defined here before running!
+# e.g., He <- cor(t(scale(climate_data)))
+
+res.cv0 <- expand.grid(method="sommer_GBLUP_GxE", scenario="CV0",
+                       trial=target.pred,  corP=NA,
+                       wEnv.corP=NA,nb.genos=NA, nb.envs=NA)
+obs.pred.all <- data.frame()
+
+for(tri in target.pred){
+  write(paste0("Processing trial: ", tri,"\n"), stderr())
+  
+  ## subset GID with geno and pheno data
+  gid.geno <- rownames(grmList[[tri]])
+  gid <- intersect(gid.geno, pheno$GID)
+  
+  if(length(gid) == 0){
+    write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
+    
+  } else {
+    ## subset pheno and geno from the program to predict
+    geno_sub <- grmList[[tri]][gid,gid]
+    pheno_sub <- pheno |> filter(GID %in% gid)
+    
+    ## select environments with more than 30 obs
+    envs <- pheno_sub %>%
+      group_by(ENV) %>% summarize(n=n(),.groups="drop") %>%
+      filter(n > 30) %>% pull(ENV)
+    
+    # STRICT FILTER: Ensure these environments exist in the He matrix
+    envs <- intersect(envs, rownames(He))
+    
+    if(length(envs) == 0){
+      write(paste0("No valid environments found for trial ", tri), stdout())
+      next
+    } else {
+      
+      # =====================================================================
+      # BUILD THE G x E KRONECKER MATRIX 
+      # =====================================================================
+      He_sub <- He[envs, envs]
+      K_ge <- kronecker(He_sub, geno_sub)
+      
+      ge_names <- paste(rep(rownames(He_sub), each = length(gid)),
+                        rep(rownames(geno_sub), times = length(rownames(He_sub))), sep = ":::")
+      
+      rownames(K_ge) <- colnames(K_ge) <- ge_names
+      
+      pheno_sub <- pheno_sub %>% mutate(GE_ID = paste(ENV, GID, sep = ":::"))
+      # =====================================================================
+      
+      df_pred_e <- data.frame()
+      
+      ## for loop over environments to predict each environment in turn
+      for(e in envs){
+        write(paste0("   Masking and predicting environment: ", e), stderr())
+        
+        ## set yield data for the test environment to NA
+        pheno_train <- pheno_sub |>
+          mutate(YLD = ifelse(ENV %in% e, NA, YLD)) %>%
+          as.data.frame()
+
+        # THE BULLETPROOF FILTERS (Required for sommer too)
+        pheno_train$GE_ID <- as.character(pheno_train$GE_ID)
+        pheno_train <- pheno_train %>% filter(GE_ID %in% rownames(K_ge))
+        
+        # CRITICAL FOR SOMMER: Force GE_ID to be a factor mapped to the K_ge matrix
+        pheno_train$GE_ID <- factor(pheno_train$GE_ID, levels = rownames(K_ge))
+        
+        pheno_train$GE_ID <- factor(pheno_train$GE_ID, levels = rownames(K_ge))
+        
+        # ==========================================================
+        # NEW SAFETY CHECKS BEFORE RUNNING THE MODEL
+        # ==========================================================
+        # 1. Check if there are any NAs in the fixed effects. 
+        # (sommer will silently drop these, which causes the 0-row crash)
+        if(any(is.na(pheno_train$LOC)) | any(is.na(pheno_train$YEAR))){
+           write("   Skipping: NAs detected in LOC or YEAR fixed effects.", stderr())
+           next
+        }
+        
+        # 2. Check if we actually have YLD data left to train the model on
+        # (Ensures the training set isn't 100% NAs)
+        if(sum(!is.na(pheno_train$YLD)) < 10){
+           write("   Skipping: Less than 10 training phenotypes available after masking.", stderr())
+           next
+        }
+        # ==========================================================
+
+        # =====================================================================
+        ## fit GBLUP model using sommer
+        # =====================================================================
+        fit <- mmer(fixed = YLD ~ LOC + YEAR, 
+                    random = ~ vsr(GE_ID, Gu = K_ge), 
+                    rcov = ~ units, 
+                    data = pheno_train,
+                    verbose = FALSE)
+        # =====================================================================
+        ## fit GBLUP model using sommer
+        # =====================================================================
+        fit <- mmer(fixed = YLD ~ LOC + YEAR, 
+                    random = ~ vsr(GE_ID, Gu = K_ge), 
+                    rcov = ~ units, 
+                    data = pheno_train,
+                    verbose = FALSE) # Set to TRUE if you want to watch it converge
+        
+        # Extract the BLUPs for the GxE term
+        # fit$U is a list. We extract the first random effect's first trait (YLD)
+        blups <- fit$U[[1]][[1]] 
+        pred_names <- names(blups)
+        
+        # Parse the predicted GE_IDs back into ENV and GID
+        # Note: sommer sometimes prepends the factor name to the output (e.g., "GE_IDEnvironmentA:::Line1")
+        # We strip "GE_ID" out if it exists, then split by ":::"
+        clean_names <- gsub("^GE_ID", "", pred_names) 
+        pred_env <- sub(":::.*", "", clean_names)     
+        pred_gid <- sub(".*:::", "", clean_names)     
+        
+        pred.all <- data.frame(ENV = pred_env,
+                               GID = pred_gid, 
+                               pred = as.numeric(blups))
+        
+        ## export predicted values for the test environment
+        df_pred_e <- rbind(df_pred_e, filter(pred.all, ENV %in% e))
+      }
+      
+      ## add observed values
+      df_pred_e <- df_pred_e |> left_join(pheno_sub, by=c("GID","ENV")) %>% 
+        mutate(target.trial=tri,
+               scenario="CV0",
+               GP.method="sommer_GBLUP_GxE")
+      
+      obs.pred.all <- rbind(obs.pred.all, df_pred_e)
+      
+      plot(ggplot(df_pred_e, aes(x=YLD, y=pred, color=ENV)) +
+             geom_point(alpha=0.6, size=1) +
+             geom_smooth(method="lm", se=FALSE)+
+             geom_rug(sides="bl")+
+             ggpubr::stat_cor(method="pearson", size=3)+
+             geom_abline(intercept=0, slope=1, color="grey", linetype="dashed")+
+             ggtitle(paste0("Predicted vs. observed values for trial ", tri),
+                     subtitle=paste0("sommer GxE genomic selection method"))+
+             theme_bigstatsr(size.rel=0.8))
+      
+      ## calculate PA in each environment
+      pa.within.env <- df_pred_e %>% group_by(ENV) %>%
+        summarize(pa=cor(YLD, pred, use="pairwise.complete.obs")) %>%
+        as.data.frame()
+      
+      ## calculate correlation across environments
+      pa <- round(cor(df_pred_e$YLD, df_pred_e$pred, use="pairwise.complete.obs"), 3)
+      idx <- which(res.cv0$trial == tri)
+      res.cv0$corP[idx] <- round(pa, 3)
+      res.cv0$wEnv.corP[idx] <- round(mean(pa.within.env$pa, na.rm=TRUE), 3)
+      res.cv0$nb.envs[idx] <- length(envs)
+      
+      ## add training/validation set size of the last fold
+      res.cv0$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
+    }
+  }
+}
+print_table(res.cv0)
+write.table(res.cv0, here("output","GP_sommer_GxE_CV0.tsv"), sep="\t", row.names=FALSE)
+saveRDS(obs.pred.all, file=here("output","GP_sommer_GxE_CV0_obs-pred.rds"))
+```
 
 ## CV00
 
@@ -325,12 +665,9 @@ write.table(res.cv00, here("output","GP_GBLUP_CV00_combined-GRM_common-pheno.tsv
 saveRDS(obs.pred.all, file=here("output","GP_GBLUP_CV00_combined-GRM_common-pheno_obs-pred.rds"))
 ```
 
-
-
 # RKHS
 
-Examples of BGLR models: https://github.com/gdlc/BGLR-R/blob/master/inst/md/RKHS.md
-
+Examples of BGLR models: <https://github.com/gdlc/BGLR-R/blob/master/inst/md/RKHS.md>
 
 ## CV0
 
@@ -560,25 +897,29 @@ saveRDS(obs.pred.all, file=here("output","GP_RKHS_CV00_combined-GRM_common-pheno
 # Final predictions
 
 ## Submission requirements
+
 Folder Structure:
 
 The zipped folder submitted should contain one methods description text file and 9 sub-directories, each named with the trial name for which the sub-directory contains predictions. For example, if the sub-directory contains predictions for the trial "AYT_Timbuktu24", then the sub-directory should be named "AYT_Timbuktu24". Each sub-directory should contain six csv files. Continuing the example, the sub-directory should contain:
 
-    CV0_Predictions.csv
-    CV0_Trials.csv
-    CV0_Accessions.csv
-    CV00_Predictions.csv
-    CV00_Trials.csv
-    CV00_Accessions.csv
+```         
+CV0_Predictions.csv
+CV0_Trials.csv
+CV0_Accessions.csv
+CV00_Predictions.csv
+CV00_Trials.csv
+CV00_Accessions.csv
+```
 
 These files should be formatted as follows.
 
 CSV file formats:
 
-    CV0_Predictions.csv and CV00_Predictions.csv: csv file with two columns, "germplasmName" and "prediction". All accessions in the focal trial that are genotyped should have a prediction.
-    CV0_Trials.csv and CV00_Trials.csv: a csv file with a single column, "studyName", containing the trial names of the trials used for training the prediction model.
-    CV0_Accessions.csv and CV00_Accessions.csv: a csv file with a single column, "germplasmName", containing the accession names used for training the prediction model.
-
+```         
+CV0_Predictions.csv and CV00_Predictions.csv: csv file with two columns, "germplasmName" and "prediction". All accessions in the focal trial that are genotyped should have a prediction.
+CV0_Trials.csv and CV00_Trials.csv: a csv file with a single column, "studyName", containing the trial names of the trials used for training the prediction model.
+CV0_Accessions.csv and CV00_Accessions.csv: a csv file with a single column, "germplasmName", containing the accession names used for training the prediction model.
+```
 
 ## CV0
 
@@ -591,8 +932,6 @@ CSV file formats:
 ```{r}
 
 ```
-
-
 
 # Appendix
 
