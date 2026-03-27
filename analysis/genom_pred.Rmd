@@ -1365,6 +1365,7 @@ for(tri in target_trials){
   write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
   CV00 <- rbind(CV00, pred.all)
 }
+saveRDS(CV00, file=here("output","GP_RKHS_CV00_final.rds"))
 
 ```
 # Appendix
