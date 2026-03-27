@@ -1374,7 +1374,7 @@ for(tri in target_trials){
                       env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
                       #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="FIXED"),
                       g=list(K=Kg, model="RKHS")),
-                    nIter=6000, burnIn=1500,
+                    nIter=10000, burnIn=2000,
                     saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_final_")))
   
   ## export predicted values
