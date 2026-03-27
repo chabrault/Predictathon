@@ -597,7 +597,7 @@ library(dplyr)
 library(sommer)
 
 # Define target programs (or use names(grmList))
-target_programs <- c("AWY1_DVPWA_2024", "TCAP_2025_MANKS") 
+target_programs <- c("STP1_2025_MCG") 
 
 cv_results <- data.frame(Trial = character(), Target_Env = character(), Fold = numeric(),
                          Pearson_r = numeric(), Valid_N = numeric(), stringsAsFactors = FALSE)
@@ -605,7 +605,7 @@ cv_results <- data.frame(Trial = character(), Target_Env = character(), Fold = n
 for(tri in target_programs){
   gc()
   write(paste0("\n======================================================\n",
-               "Starting Strict CV1 for: ", tri, "\n======================================================"), stderr())
+               "Starting Strict CV00 for: ", tri, "\n======================================================"), stderr())
   
   if(!tri %in% names(grmList)) next
   
@@ -614,8 +614,11 @@ for(tri in target_programs){
   pheno_sub <- pheno %>% dplyr::filter(GID %in% gid.geno)
   
   # RAM SAVER
-  robust_envs <- pheno_sub %>% dplyr::group_by(ENV) %>% dplyr::summarize(n = n(), .groups = "drop") %>% 
-    dplyr::filter(n >= 25) %>% dplyr::pull(ENV)
+  robust_envs <- pheno_sub %>% 
+    dplyr::group_by(ENV) %>% 
+    dplyr::summarize(n = n(), .groups = "drop") %>% 
+    dplyr::filter(n >= 25) %>% 
+    dplyr::pull(ENV)
   
   pheno_sub <- pheno_sub %>% dplyr::filter(ENV %in% robust_envs)
   envs <- intersect(unique(pheno_sub$ENV), rownames(He))
@@ -639,11 +642,18 @@ for(tri in target_programs){
       focal_gids <- split_gids[[f]]
       write(paste0("   Env: ", e, " | Fold: ", f, " | Masking ", length(focal_gids), " focal lines..."), stderr())
       
-      # 1. STRICT NO-HISTORY PURGE: Remove focal lines entirely from training data
-      pheno_train <- pheno_sub %>% dplyr::filter(!(GID %in% focal_gids))
+      # 1. STRICT CV00 PURGE:
+      # - Remove focal lines completely (Untested Lines)
+      # - Remove the target environment completely (Untested Environment)
+      pheno_train <- pheno_sub %>% 
+        dplyr::filter(!(GID %in% focal_gids)) %>%
+        dplyr::filter(ENV != e) 
       
       # 2. Add focal lines back ONLY in the target environment as NA
-      target_na <- env_data %>% dplyr::filter(GID %in% focal_gids) %>% dplyr::mutate(YLD = NA)
+      target_na <- env_data %>% 
+        dplyr::filter(GID %in% focal_gids) %>% 
+        dplyr::mutate(YLD = NA)
+      
       pheno_combined <- dplyr::bind_rows(pheno_train, target_na)
       
       # 3. Build Matrices
@@ -707,8 +717,8 @@ for(tri in target_programs){
     }
   }
 }
-write.csv(cv_results, "Strict_CV1_Results.csv", row.names = FALSE)
-write("CV1 Complete!", stdout())
+write.csv(cv_results, "Strict_CV00_Results.csv", row.names = FALSE)
+write("CV00 Complete!", stdout())
 ```
 
 ### CV00 Final Predictions
