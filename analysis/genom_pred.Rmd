@@ -1317,7 +1317,7 @@ saveRDS(CV0, file=here("output","GP_GBLUP_CV0_final.rds"))
 ## CV00
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
-all_final_predictions <- data.frame()
+CV00 <- data.frame()
 for(tri in target_trials){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
   env.pred <- target_pheno |> filter(trial %in% tri) |> 
@@ -1326,19 +1326,17 @@ for(tri in target_trials){
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   
-  
   ## set yield data for the test environment to NA
   pheno_train <- pheno |>
     bind_rows(target_pheno %>% filter(trial %in% tri)) %>%
-    filter(GID %in% gid) |> 
+    #filter(GID %in% gid) |> 
     as.data.frame()
   gid <- intersect(gid.geno, pheno_train$GID)
+  pheno_train <- pheno_train %>% filter(GID %in% gid)
   
   ## subset pheno and geno from the program to predict
   geno_sub <- grmList[[tri]][gid,gid]
-  pheno_train <- pheno_train[match(gid, pheno_train$GID),]
-  pheno_train$YLD[pheno_train$ENV %in% env.pred$ENV] <- NA
-  
+
   ## BGLR RKHS
   Zg <- model.matrix(~GID, pheno_train)
   D<-as.matrix(dist(geno_sub,method="euclidean"))^2
@@ -1356,17 +1354,16 @@ for(tri in target_trials){
                     saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_final_")))
   
   ## export predicted values
-  
   pred.all <- data.frame(ENV=pheno_train$ENV, 
                          GID=pheno_train$GID, pred=c(fit$yHat)) |> 
-    filter(ENV %in% env.pred) 
+    filter(ENV %in% env.pred$ENV) 
   pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
                                                  prediction=pred)
   p2d <- here("submission", tri)
   dir.create(p2d)
   p2f <- here("submission",tri, "CV00_Predictions.csv")
   write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
-  all_final_predictions <- rbind(all_final_predictions, pred.all)
+  CV00 <- rbind(CV00, pred.all)
 }
 
 ```
