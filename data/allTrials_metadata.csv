@@ -1,8 +1,7 @@
-focal_trial,studyDbId,name,location,year,program,isFocal
+focal_trial,studyDbId,name,location,year,program,isFocal,
 Washington State University,10701,AHR1_HRW_2022_Davenport,Davenport, WA,2022,Washington State University,FALSE
 Washington State University,10845,AHR1_HRW_2023_Davenport,Davenport, WA,2023,Washington State University,FALSE
 Washington State University,10632,AWY1_DVP_2025,Davenport, WA,2025,Washington State University,FALSE
-Washington State University,10678,AWY1_DVPWA_2024,Davenport, WA,2024,Washington State University,TRUE
 Washington State University,10222,AWY1_HARWA_2024,Harrington, WA,2024,Washington State University,FALSE
 Washington State University,10221,AWY1_KAHWA_2024,Kahlotus, WA,2024,Washington State University,FALSE
 Washington State University,10225,AWY1_LNDWA_2024,Lind, WA,2024,Washington State University,FALSE
@@ -39,7 +38,6 @@ USDA-ARS Kansas,11022,TCAP_2023_COLKS,Colby, KS,2023,USDA-ARS Kansas,FALSE
 USDA-ARS Kansas,11000,TCAP_2023_HAYKS,Hays, KS,2023,USDA-ARS Kansas,FALSE
 USDA-ARS Kansas,11013,TCAP_2023_HUTKS,Hutchinson, KS,2023,USDA-ARS Kansas,FALSE
 USDA-ARS Kansas,10997,TCAP_2023_MANKS,Manhattan, KS,2023,USDA-ARS Kansas,FALSE
-USDA-ARS Kansas,10680,TCAP_2025_MANKS,Manhattan, KS,2025,USDA-ARS Kansas,TRUE
 Michigan State University,9454,23_AYTRed_SVREC,Saginaw Valley Research and Extension Center, MI,2023,Michigan State University,FALSE
 Michigan State University,10020,23_Big6_SVREC,Saginaw Valley Research and Extension Center, MI,2023,Michigan State University,FALSE
 Michigan State University,9980,23_MSU_PYT_1_SVREC,Saginaw Valley Research and Extension Center, MI,2023,Michigan State University,FALSE
@@ -52,7 +50,6 @@ Michigan State University,10021,24_MSU_PYT_2_SVREC,Saginaw Valley Research and E
 Michigan State University,10029,24_MSU_PYT_3_SVREC,Saginaw Valley Research and Extension Center, MI,2024,Michigan State University,FALSE
 Michigan State University,10255,25_Big6_Core_FHB_FHB,East Lansing, MI,2025,Michigan State University,FALSE
 Michigan State University,10262,25_Big6_MASON_MASMI,Mason, MI,2025,Michigan State University,FALSE
-Michigan State University,10675,25_Big6_SVREC_SVREC,Saginaw Valley Research and Extension Center, MI,2025,Michigan State University,TRUE
 Michigan State University,10258,25_MSU_AYT_MI_ALLMI,Allegan County, MI,2025,Michigan State University,FALSE
 Michigan State University,10250,25_MSU_AYT_MI_CENMI,Central, MI,2025,Michigan State University,FALSE
 Michigan State University,10246,25_MSU_AYT_MI_FHB,East Lansing, MI,2025,Michigan State University,FALSE
@@ -88,7 +85,6 @@ Michigan State University,9108,TP_2020_Frankenmuth,Saginaw Valley Research and E
 Michigan State University,9116,TP_2021_Frankenmuth,Saginaw Valley Research and Extension Center, MI,2021,Michigan State University,FALSE
 University of Wisconsin,10941,OHRWW_2023_MAD,Madison, WI,2023,University of Wisconsin,FALSE
 University of Wisconsin,10964,OHRWW_2023_SPO,Spooner, WI,2023,University of Wisconsin,FALSE
-University of Wisconsin,10679,OHRWW_2025_SPO,Spooner, WI,2025,University of Wisconsin,TRUE
 University of Wisconsin,10284,OWW_2020_DANIL,Danforth, IL,2020,University of Wisconsin,FALSE
 University of Wisconsin,10280,OWW_2020_MAD,Madison, WI,2020,University of Wisconsin,FALSE
 University of Wisconsin,10295,OWW_2021_DANIL,Danforth, IL,2021,University of Wisconsin,FALSE
@@ -102,9 +98,7 @@ Cornell University,6567,CornellMaster_2011_McGowan,Ithaca, NY - McGowan,2011,Cor
 Cornell University,6170,CornellMaster_2013_McGowan,Ithaca, NY - McGowan,2013,Cornell University,FALSE
 Cornell University,6090,CornellMaster_2015_McGowan,Ithaca, NY - McGowan,2015,Cornell University,FALSE
 Cornell University,10905,CornellMaster_2023_McGowan,Ithaca, NY - McGowan,2023,Cornell University,FALSE
-Cornell University,10676,CornellMaster_2025_McGowan,Ithaca, NY - McGowan,2025,Cornell University,TRUE
 University of Minnesota,10150,23Crk_AYs_R18_Yield,Crookston, MN,2023,University of Minnesota,FALSE
-University of Minnesota,10674,24Crk_AY2-3,Crookston, MN,2024,University of Minnesota,TRUE
 University of Minnesota,10725,AY3-8_YIELD_CRK-MN_2022,Crookston, MN,2022,University of Minnesota,FALSE
 University of Minnesota,7322,UMN-WHEAT-2008-CROOKSTON,Crookston, MN,2008,University of Minnesota,FALSE
 University of Minnesota,6608,UMN-WHEAT-2009-CROOKSTON,Crookston, MN,2009,University of Minnesota,FALSE
@@ -121,7 +115,6 @@ South Dakota State University- Winter Wheat,9424,2022_AYT_Aurora,Aurora, SD,2022
 South Dakota State University- Winter Wheat,9422,2022_Elite_AURORA,Aurora, SD,2022,South Dakota State University- Winter Wheat,FALSE
 South Dakota State University- Winter Wheat,9622,2023_AYT_Aurora,Aurora, SD,2023,South Dakota State University- Winter Wheat,FALSE
 South Dakota State University- Winter Wheat,9621,2023_Elite_AURORA,Aurora, SD,2023,South Dakota State University- Winter Wheat,FALSE
-South Dakota State University- Winter Wheat,10673,2025_AYT_Aurora,Aurora, SD,2025,South Dakota State University- Winter Wheat,TRUE
 University of Illinois,10343,A5S_Scb_21,Urbana, IL,2021,University of Illinois,FALSE
 University of Illinois,10691,A5S_Scb_22,Urbana, IL,2022,University of Illinois,FALSE
 University of Illinois,10692,A5S_Urb_22,Urbana, IL,2022,University of Illinois,FALSE
@@ -208,11 +201,18 @@ University of Illinois,10837,VT_Scb_22,Urbana, IL,2022,University of Illinois,FA
 University of Illinois,11018,VT_Scb_23,Urbana, IL,2023,University of Illinois,FALSE
 University of Illinois,10787,YT_Urb_22,Urbana, IL,2022,University of Illinois,FALSE
 University of Illinois,11014,YT_Urb_23,Urbana, IL,2023,University of Illinois,FALSE
-University of Illinois,10677,YT_Urb_25,Urbana, IL,2025,University of Illinois,TRUE
-TAMU,10681,STP1_2025_MCG,McGregor, TX,2025,TAMU,TRUE
 TAMU,10839,TXE_2022_Bushland-Dryland,Bushland, TX - Dryland,2022,TAMU,FALSE
 TAMU,10832,TXE_2022_Bushland-Irrigated,Bushland, TX - Irrigated,2022,TAMU,FALSE
 TAMU,10811,TXE_2022_McGregor,McGregor, TX,2022,TAMU,FALSE
 TAMU,11025,TXE_2023_Bushland-Dryland,Bushland, TX - Dryland,2023,TAMU,FALSE
 TAMU,11026,TXE_2023_Bushland-Irrigated,Bushland, TX - Irrigated,2023,TAMU,FALSE
 TAMU,11016,TXE_2023_McGregor,McGregor, TX,2023,TAMU,FALSE
+Washington State University,10678,AWY1_DVPWA_2024,Davenport, WA,2024,Washington State University,TRUE
+USDA-ARS Kansas,10680,TCAP_2025_MANKS,Manhattan, KS,2025,USDA-ARS Kansas,TRUE
+Michigan State University,10675,25_Big6_SVREC_SVREC,Saginaw Valley Research and Extension Center, MI,2025,Michigan State University,TRUE
+University of Wisconsin,10679,OHRWW_2025_SPO,Spooner, WI,2025,University of Wisconsin,TRUE
+Cornell University,10676,CornellMaster_2025_McGowan,Ithaca, NY - McGowan,2025,Cornell University,TRUE
+University of Minnesota,10674,24Crk_AY2-3,Crookston, MN,2024,University of Minnesota,TRUE
+South Dakota State University- Winter Wheat,10673,2025_AYT_Aurora,Aurora, SD,2025,South Dakota State University- Winter Wheat,TRUE
+University of Illinois,10677,YT_Urb_25,Urbana, IL,2025,University of Illinois,TRUE
+TAMU,10681,STP1_2025_MCG,McGregor, TX,2025,TAMU,TRUE

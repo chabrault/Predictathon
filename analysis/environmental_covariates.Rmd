@@ -66,10 +66,9 @@ trials_geocoded <- trials_geocoded %>%
   mutate(weather_data = pmap(list(latitude, longitude, YEAR), fetch_daymet))
 
 
-trials_env <- env_results %>%
-  tidyr::unnest(weather_data, names_repair = "unique")
-
-trials_env <- trials_env[,-10]
+trials_env <- trials_geocoded %>%
+  tidyr::unnest(weather_data, names_repair = "unique") %>%
+  dplyr::distinct(ENV, yday, .keep_all = TRUE)
 
 trials_env
 

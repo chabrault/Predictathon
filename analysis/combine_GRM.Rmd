@@ -29,7 +29,6 @@ suppressPackageStartupMessages(library(progress)) # progress bar
 
 ```
 
-
 # Set up root directory
 
 ```{r current dir}
@@ -37,13 +36,11 @@ here::i_am("analysis/combine_GRM.Rmd")
 source(here("code","useful_functions.R"))
 ```
 
-
 ```{r}
 target.tri <- c("AWY1_DVPWA_2024","TCAP_2025_MANKS","25_Big6_SVREC_SVREC",
                 "OHRWW_2025_SPO","CornellMaster_2025_McGowan","24Crk_AY2-3",
                 "2025_AYT_Aurora","YT_Urb_25","STP1_2025_MCG")
 ```
-
 
 # Convert vcf files to GRM matrices
 
@@ -96,8 +93,8 @@ For non-focal accessions
 
 # Combine GRM matrices for each program
 
-For AWY1, same vcf files were downloaded twice, copy the focal_accessions GRM to the combined_GRM.
-For Cornell, two files were identical but completely disjoint from the focalAccessions. Copy the focalAccessions_GRM to the combined_GRM.
+For AWY1, same vcf files were downloaded twice, copy the focal_accessions GRM to the combined_GRM. For Cornell, two files were identical but completely disjoint from the focalAccessions. Copy the focalAccessions_GRM to the combined_GRM.
+
 ```{r combine-grm}
 pbm <- c("CornellMaster_2025_McGowan", "AWY1_DVPWA_2024")
 rerun=TRUE
@@ -161,4 +158,99 @@ for(tri in setdiff(target.tri, pbm)){
 }
 ```
 
+## Combine Focal and Combined GRMs
 
+```{r}
+# Define the root directory where all your trial folders are located
+base_dir <- "C:/Predictathon/Predictathon/data/genotypic"
+trial_folders <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
+combined_grms <- list()
+
+for (folder in trial_folders) {
+  trial_name <- basename(folder)
+  write(paste0("\n=== Processing: ", trial_name, " ==="), stdout())
+  
+  clean_dir <- file.path(folder, "clean")
+  if (!dir.exists(clean_dir)) {
+    write("   -> SKIPPED: No 'clean' folder.", stderr())
+    next
+  }
+  
+  # ====================================================================
+  # NEW: Only pull files that end specifically in "GRM.rds"
+  rds_files <- list.files(clean_dir, pattern = "GRM\\.rds$", full.names = TRUE, ignore.case = TRUE)
+  # ====================================================================
+  
+  write(paste0("   -> Found ", length(rds_files), " GRM.rds files."), stdout())
+  
+  if (length(rds_files) < 2) {
+    write("   -> SKIPPED: Needs at least 2 GRM files to combine.", stderr())
+    next
+  }
+  
+  # Load and sanitize the matrices
+  partial_covs <- lapply(rds_files, function(f) {
+    mat <- readRDS(f)
+    
+    # Sanitize: Drop extra text columns if it loaded as a data frame
+    if (is.data.frame(mat) && (is.character(mat[[1]]) || is.factor(mat[[1]]))) {
+      rownames(mat) <- as.character(mat[[1]])
+      mat <- mat[, -1, drop = FALSE] 
+    }
+    
+    mat <- as.matrix(mat)
+    
+    # Sanitize: Force numeric if it accidentally became character
+    if (typeof(mat) == "character") {
+      rnames <- rownames(mat)
+      cnames <- colnames(mat)
+      mat <- matrix(as.numeric(mat), nrow = nrow(mat), ncol = ncol(mat))
+      rownames(mat) <- rnames
+      colnames(mat) <- cnames
+    }
+    
+    # Sanitize: Remove duplicate row names
+    if (any(duplicated(rownames(mat)))) {
+      mat <- mat[!duplicated(rownames(mat)), !duplicated(colnames(mat))]
+    }
+    
+    return(mat)
+  })
+  
+  # Create the Master Dictionary
+  all_gids <- unique(unlist(lapply(partial_covs, rownames)))
+  all_gids <- sort(all_gids) 
+  
+  # Map 0-based indices for the EM function
+  var_indices <- lapply(partial_covs, function(mat) {
+    return(match(rownames(mat), all_gids) - 1)
+  })
+  
+  write(paste0("   -> Combining ", length(partial_covs), " matrices (Total lines: ", length(all_gids), ")..."), stdout())
+  
+  combined_result <- tryCatch({
+    covariance_combiner(
+      partial_covs = partial_covs, var_indices = var_indices,
+      degrees_freedom = NULL, max_iter = 100, tol = 1e-6,
+      track_loglik = FALSE, calc_sampling_cov = FALSE
+    )
+  }, error = function(e) {
+    write(paste0("   -> ERROR IN MATH: ", e$message), stderr())
+    return(NULL)
+  })
+  
+  if (is.null(combined_result)) next
+  
+  # Reformat the final combined matrix
+  combined_matrix <- combined_result$psi
+  rownames(combined_matrix) <- all_gids
+  colnames(combined_matrix) <- all_gids
+  combined_matrix <- (combined_matrix + t(combined_matrix)) / 2 # Force Symmetry
+  
+  combined_grms[[trial_name]] <- combined_matrix
+  
+  save_path <- file.path(clean_dir, paste0(trial_name, "_All_GRM.rds"))
+  saveRDS(combined_matrix, save_path)
+  write(paste0("   -> SUCCESS! Saved combined matrix to: ", save_path), stdout())
+}
+```
