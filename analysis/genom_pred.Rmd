@@ -1335,12 +1335,13 @@ for(tri in target_trials){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
   env.pred <- target_pheno |> filter(trial %in% tri) |> 
     dplyr::select(trial, ENV, LOC, YEAR) |> distinct()
+  gid.pred <- target_pheno |> filter(trial %in% tri) |> pull(GID)
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   
   ## set yield data for the test environment to NA
-  pheno_sub <- pheno |> filter(GID %in% gid.geno)
+  pheno_sub <- pheno |> filter(GID %in% gid.geno, !GID %in% gid.pred)
   pheno_train <- pheno_sub |>
     bind_rows(target_pheno %>% filter(trial %in% tri)) %>% 
     as.data.frame() %>% filter(GID %in%  gid.geno)
@@ -1348,6 +1349,7 @@ for(tri in target_trials){
   geno_sub <- geno_sub <- grmList[[tri]][gid,gid]
   
   pheno_train$YLD[pheno_train$ENV %in% env.pred$ENV] <- NA
+  pheno_train$YLD[pheno_train$GID %in% gid.pred] <- NA
   ## output accessions and trials used for training
   trialsTrain <- data.frame(studyName=unique(pheno_sub$ENV))
   germplasmTrain <- data.frame(germplasmName=unique(pheno_sub$GID))
