@@ -1275,7 +1275,11 @@ target_trials <- unique(target_pheno$trial)
 CV0 <- data.frame()
 for(tri in target_trials){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
+  env.pred <- target_pheno |> filter(trial %in% tri) |> 
+    dplyr::select(trial, ENV, LOC, YEAR) |> distinct()
   
+  # p2d <- here("submission", tri)
+  # dir.create(p2d)
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
@@ -1285,12 +1289,20 @@ for(tri in target_trials){
   geno_sub <- grmList[[tri]][gid,gid]
   pheno_sub <- pheno |> filter(GID %in% gid)
   
-  df_pred_e <- data.frame()
-  
   ## set yield data for the test environment to NA
   pheno_train <- pheno_sub |>
     bind_rows(target_pheno %>% filter(trial %in% tri)) %>% 
     as.data.frame()
+  
+  ## output accessions and trials used for training
+  trialsTrain <- data.frame(studyName=unique(pheno_sub$ENV))
+  germplasmTrain <- data.frame(germplasmName=unique(pheno_sub$GID))
+  
+  p2f.tri <- here("submission",tri,"CV0_Trials.csv")
+  write.table(trialsTrain, file=p2f.tri, sep=",", col.names=TRUE, row.names=F)
+  
+  p2f.geno <- here(submission, tri, "CV0_Accessions.csv")
+  write.table(germplasmTrain, file=p2f.geno, sep=",", col.names=TRUE, row.names=F)
   
   ## fit GBLUP model
   ### add fixed effects of location and year instead of env?
@@ -1299,15 +1311,13 @@ for(tri in target_trials){
                           fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
                           n.core=nb.cores)
   ## contains the predicted values for all genotypes, including those with observed phenotypes in the training set
-  #stopifnot(identical(names(fit$pred), pheno_train$GID))
   ## for rrBLUP, predicted values averaged over fixed effects
   pred.all <- data.frame(trial=tri,
                          GID=names(fit$pred), pred=c(fit$pred))
-  pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
-                                                 prediction=pred)
-  p2d <- here("submission", tri)
-  dir.create(p2d)
-  p2f <- here("submission",tri, "CV00_Predictions.csv")
+  pred.sub <- pred.all |> rename(germplasmName=GID, 
+                                 prediction=pred)
+  
+  p2f <- here("submission",tri, "CV0_Predictions.csv")
   write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
   CV0 <- rbind(CV0, pred.all)
 }
@@ -1327,16 +1337,27 @@ for(tri in target_trials){
   gid <- intersect(gid.geno, pheno$GID)
   
   ## set yield data for the test environment to NA
-  pheno_train <- pheno |>
+  pheno_sub <- pheno |> filter(GID %in% gid.geno)
+  pheno_train <- pheno_sub |>
     bind_rows(target_pheno %>% filter(trial %in% tri)) %>%
     #filter(GID %in% gid) |> 
     as.data.frame()
   gid <- intersect(gid.geno, pheno_train$GID)
   pheno_train <- pheno_train %>% filter(GID %in% gid)
   
+  ## output accessions and trials used for training
+  trialsTrain <- data.frame(studyName=unique(pheno_sub$ENV))
+  germplasmTrain <- data.frame(germplasmName=unique(pheno_sub$GID))
+  
+  p2f.tri <- here("submission",tri,"CV00_Trials.csv")
+  write.table(trialsTrain, file=p2f.tri, sep=",", col.names=TRUE, row.names=F)
+  
+  p2f.geno <- here(submission, tri, "CV00_Accessions.csv")
+  write.table(germplasmTrain, file=p2f.geno, sep=",", col.names=TRUE, row.names=F)
+  
   ## subset pheno and geno from the program to predict
   geno_sub <- grmList[[tri]][gid,gid]
-
+  
   ## BGLR RKHS
   Zg <- model.matrix(~GID, pheno_train)
   D<-as.matrix(dist(geno_sub,method="euclidean"))^2
@@ -1359,8 +1380,8 @@ for(tri in target_trials){
     filter(ENV %in% env.pred$ENV) 
   pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
                                                  prediction=pred)
-  p2d <- here("submission", tri)
-  dir.create(p2d)
+  # p2d <- here("submission", tri)
+  # dir.create(p2d)
   p2f <- here("submission",tri, "CV00_Predictions.csv")
   write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
   CV00 <- rbind(CV00, pred.all)

@@ -106,7 +106,7 @@ for(tri in setdiff(target.tri, pbm)){
     grmList <- list()
     
     ## Step 1: convcert the focal accessions genomic matrix to a GRM
-    p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_genotypes_curated_numeric.rds")
+    p2f <- paste0(here("data","genotypic",tri,"clean"),"/",tri,"_Predictathon_genotypes_curated_numeric.rds")
     genoFoc <- readRDS(p2f)
     grmList[[1]] <- rrBLUP::A.mat(genoFoc-1)
     ## export focal GRM

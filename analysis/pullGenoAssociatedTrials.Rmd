@@ -20,7 +20,7 @@ suppressPackageStartupMessages(library(purrr)) # handle lists
 ## devtools::install_github("chabrault/HRSWGS") # custom package instal
 #suppressPackageStartupMessages(library(HRSWGS)) # custom package
 #devtools::install_github("TriticeaeToolbox/BrAPI.R")
-pak::pak("jeanlucj/T3BrapiHelpers")
+#pak::pak("jeanlucj/T3BrapiHelpers")
 suppressPackageStartupMessages(library(BrAPI)) # T3 connection
 suppressPackageStartupMessages(library(T3BrapiHelpers)) # T3 helper
 suppressPackageStartupMessages(library(DT)) # print table
