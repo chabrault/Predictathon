@@ -73,7 +73,7 @@ tri <- "2025_AYT_Aurora"
 combined_trials <- c("25_Big6_SVREC_SVREC", "YT_Urb_25")
 
 file_endings <- ifelse(target.pred %in% combined_trials, 
-                       "_Combined_GRM.rds", 
+                       "_combined_GRM.rds", 
                        "_All_GRM.rds")
 
 # Build the exact file paths using those dynamic endings
@@ -184,7 +184,7 @@ for(tri in target.pred){
         pheno_train <- pheno_sub |>
           mutate(YLD=ifelse(ENV %in% e, NA, YLD)) %>%
           as.data.frame()
-
+        
         ## fit GBLUP model
         ### add fixed effects of location and year instead of env?
         fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD",
@@ -292,9 +292,9 @@ for(tri in target_programs){
     next
   }
   
-    gid.geno <- rownames(grmList[[tri]])
-    geno_sub <- grmList[[tri]]
-    pheno_sub <- pheno %>% dplyr::filter(GID %in% gid.geno)
+  gid.geno <- rownames(grmList[[tri]])
+  geno_sub <- grmList[[tri]]
+  pheno_sub <- pheno %>% dplyr::filter(GID %in% gid.geno)
   
   # =====================================================================
   # THE RAM SAVER (Historical Filter)
@@ -470,7 +470,7 @@ process_trial <- function(tri) {
   pheno_clean <- pheno_sub %>%
     dplyr::anti_join(target_sub, by = c("ENV", "GID"))
   
-# The RAM Saver Filter
+  # The RAM Saver Filter
   robust_historical_envs <- pheno_clean %>%
     dplyr::group_by(ENV) %>%
     dplyr::summarize(n = n(), .groups = "drop") %>%
@@ -480,7 +480,7 @@ process_trial <- function(tri) {
   # === NEW: Define your diverse trial here ===
   rescue_env <- "Neoga_2022" 
   # ===========================================
-
+  
   target_envs <- unique(target_sub$ENV)
   
   # Force the rescue environment into the allowed list so it doesn't get dropped
@@ -766,7 +766,7 @@ process_trial_cv00 <- function(tri) {
     dplyr::filter(!GID %in% target_gids)
   # =====================================================================
   
- # The RAM Saver Filter
+  # The RAM Saver Filter
   robust_historical_envs <- pheno_clean %>%
     dplyr::group_by(ENV) %>%
     dplyr::summarize(n = n(), .groups = "drop") %>%
@@ -774,7 +774,7 @@ process_trial_cv00 <- function(tri) {
     dplyr::pull(ENV)
   
   rescue_env <- "Neoga_2022" 
-
+  
   target_envs <- unique(target_sub$ENV)
   
   # Force the rescue environment into the allowed list so it doesn't get dropped
@@ -905,14 +905,14 @@ obs.pred.all <- data.frame()
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
-
+  
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-
+    
   }else {
     ## subset GID with geno and pheno data
     gid.geno <- rownames(grmList[[tri]])
@@ -922,7 +922,7 @@ for(tri in target.pred){
     geno_sub <- grmList[[tri]][gid,gid]
     pheno_sub <- pheno |> filter(GID %in% gid)
     df_pred_e <- data.frame()
-
+    
     ## select environments with more than 30 obs
     envs <- pheno_sub %>%
       group_by(ENV) %>% summarize(n=n(),.groups="drop") %>%
@@ -932,7 +932,7 @@ for(tri in target.pred){
       write(paste0("No environment with more than 30 observations for trial ", tri), stdout())
       next
     } else {
-
+      
       ## for loop over environments to predict each environment in turn
       for(e in envs){
         ## set yield data for the test environment to NA +
@@ -988,7 +988,7 @@ for(tri in target.pred){
       res.cv00$nb.genos[idx] <- length(unique(pheno_train$GID[!is.na(pheno_train$YLD)]))
     }
   }
-
+  
 }
 print_table(res.cv00)
 write.table(res.cv00, here("output","GP_GBLUP_CV00_combined-GRM_common-pheno.tsv"),
@@ -1012,14 +1012,14 @@ obs.pred.all <- data.frame()
 
 for(tri in target.pred){
   write(paste0("Processing trial: ", tri,"\n"), stderr())
-
+  
   ## subset GID with geno and pheno data
   gid.geno <- rownames(grmList[[tri]])
   gid <- intersect(gid.geno, pheno$GID)
   length(gid)
   if(length(gid) == 0){
     write(paste0("No genotypes with both geno and pheno data for trial ", tri), stdout())
-
+    
   }else {
     ## subset pheno and geno from the program to predict
     geno_sub <- grmList[[tri]][gid,gid]
@@ -1068,7 +1068,7 @@ for(tri in target.pred){
                             nIter=6000, burnIn=1500,
                             saveAt =here("output","temp",paste0("RKHS_loc-env_CV0_tri-",tri,"_env-",e)))
         }
-
+        
         ## export predicted values
         #stopifnot(identical(names(fit$pred), pheno_train$GID))
         pred.all <- data.frame(ENV=pheno_train$ENV,
@@ -1174,11 +1174,11 @@ for(tri in target.pred){
         
         fit <- BGLR::BGLR(y=pheno_train$YLD,
                           ETA=list(
-                            #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                            env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
                             #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="FIXED"),
                             g=list(K=Kg, model="RKHS")),
                           nIter=6000, burnIn=1500,
-                          saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_env-",e)))
+                          saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_final_")))
         
         ## export predicted values
         #stopifnot(identical(names(fit$pred), pheno_train$GID))
@@ -1253,18 +1253,123 @@ CV0_Trials.csv and CV00_Trials.csv: a csv file with a single column, "studyName"
 CV0_Accessions.csv and CV00_Accessions.csv: a csv file with a single column, "germplasmName", containing the accession names used for training the prediction model.
 ```
 
+```{r}
+# 1. Load the target accessions
+target_data <- read_csv(here("data","acc_for_prediction.csv"))
+
+target_pheno <- target_data %>%
+  dplyr::rename(GID = acc_name,
+                LOC = location,
+                YEAR = year) %>%  
+  dplyr::mutate(YLD = NA) %>%
+  dplyr::select(trial, ENV, GID, LOC, YEAR, YLD)
+
+all_final_predictions <- data.frame()
+target_trials <- unique(target_pheno$trial)
+```
+
+
 ## CV0
 
 ```{r}
-
+CV0 <- data.frame()
+for(tri in target_trials){
+  write(paste0("Processing trial: ", tri,"\n"), stderr())
+  
+  ## subset GID with geno and pheno data
+  gid.geno <- rownames(grmList[[tri]])
+  gid <- intersect(gid.geno, pheno$GID)
+  length(gid)
+  
+  ## subset pheno and geno from the program to predict
+  geno_sub <- grmList[[tri]][gid,gid]
+  pheno_sub <- pheno |> filter(GID %in% gid)
+  
+  df_pred_e <- data.frame()
+  
+  ## set yield data for the test environment to NA
+  pheno_train <- pheno_sub |>
+    bind_rows(target_pheno %>% filter(trial %in% tri)) %>% 
+    as.data.frame()
+  
+  ## fit GBLUP model
+  ### add fixed effects of location and year instead of env?
+  fit <- rrBLUP::kin.blup(data=pheno_train, geno="GID",pheno="YLD",
+                          K=geno_sub,
+                          fixed=c("LOC","YEAR"),#"ENV", ## add env as fixed effect
+                          n.core=nb.cores)
+  ## contains the predicted values for all genotypes, including those with observed phenotypes in the training set
+  #stopifnot(identical(names(fit$pred), pheno_train$GID))
+  ## for rrBLUP, predicted values averaged over fixed effects
+  pred.all <- data.frame(trial=tri,
+                         GID=names(fit$pred), pred=c(fit$pred))
+  pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
+                                                 prediction=pred)
+  p2d <- here("submission", tri)
+  dir.create(p2d)
+  p2f <- here("submission",tri, "CV00_Predictions.csv")
+  write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
+  CV0 <- rbind(CV0, pred.all)
+}
+saveRDS(CV0, file=here("output","GP_GBLUP_CV0_final.rds"))
 ```
 
 ## CV00
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
+all_final_predictions <- data.frame()
+for(tri in target_trials){
+  write(paste0("Processing trial: ", tri,"\n"), stderr())
+  env.pred <- target_pheno |> filter(trial %in% tri) |> 
+    dplyr::select(trial, ENV, LOC, YEAR) |> distinct()
+  ## subset GID with geno and pheno data
+  gid.geno <- rownames(grmList[[tri]])
+  gid <- intersect(gid.geno, pheno$GID)
+  
+  
+  ## set yield data for the test environment to NA
+  pheno_train <- pheno |>
+    bind_rows(target_pheno %>% filter(trial %in% tri)) %>%
+    filter(GID %in% gid) |> 
+    as.data.frame()
+  gid <- intersect(gid.geno, pheno_train$GID)
+  
+  ## subset pheno and geno from the program to predict
+  geno_sub <- grmList[[tri]][gid,gid]
+  pheno_train <- pheno_train[match(gid, pheno_train$GID),]
+  pheno_train$YLD[pheno_train$ENV %in% env.pred$ENV] <- NA
+  
+  ## BGLR RKHS
+  Zg <- model.matrix(~GID, pheno_train)
+  D<-as.matrix(dist(geno_sub,method="euclidean"))^2
+  D<-D/mean(D)
+  h<-1
+  K<-exp(-h*D)
+  Kg <- Zg %*% K %*% t(Zg)
+  
+  fit <- BGLR::BGLR(y=pheno_train$YLD,
+                    ETA=list(
+                      env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
+                      #env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="FIXED"),
+                      g=list(K=Kg, model="RKHS")),
+                    nIter=6000, burnIn=1500,
+                    saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_final_")))
+  
+  ## export predicted values
+  
+  pred.all <- data.frame(ENV=pheno_train$ENV, 
+                         GID=pheno_train$GID, pred=c(fit$yHat)) |> 
+    filter(ENV %in% env.pred) 
+  pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
+                                                 prediction=pred)
+  p2d <- here("submission", tri)
+  dir.create(p2d)
+  p2f <- here("submission",tri, "CV00_Predictions.csv")
+  write.table(pred.sub, p2f, sep=",", col.names=TRUE, row.names=FALSE)
+  all_final_predictions <- rbind(all_final_predictions, pred.all)
+}
 
 ```
-
 # Appendix
 
 ```{r info}
