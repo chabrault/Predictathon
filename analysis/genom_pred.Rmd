@@ -121,8 +121,8 @@ pheno <- pheno_init |>
   mutate(STATE = str_extract(LOC, "[A-Z]{2}$")) |> 
   mutate(LOC = gsub(", [A-Z]{2}", "", LOC)) |> 
   mutate(ENV = paste0(LOC, "_", YEAR)) |>
-  dplyr::select(GID, PROG, LOC, STATE, YEAR, ENV, YLD) |> 
-  group_by(GID, LOC, STATE, YEAR, ENV) |>
+  dplyr::select(GID, PROG, LOC, STATE, YEAR, ENV, YLD,study_name) |> 
+  group_by(GID, LOC, STATE, YEAR, ENV,study_name) |>
   summarise(YLD = mean(YLD, na.rm=TRUE), .groups = "drop")
 head(pheno)
 
@@ -1297,7 +1297,7 @@ for(tri in target_trials){
   geno_sub <- geno_sub <- grmList[[tri]][gid,gid]
   
   ## output accessions and trials used for training
-  trialsTrain <- data.frame(studyName=unique(pheno_sub$ENV))
+  trialsTrain <- data.frame(studyName=unique(pheno_sub$study_name))
   germplasmTrain <- data.frame(germplasmName=unique(pheno_sub$GID))
   
   p2f.tri <- here("submission",tri,"CV0_Trials.csv")
@@ -1351,7 +1351,7 @@ for(tri in target_trials){
   pheno_train$YLD[pheno_train$ENV %in% env.pred$ENV] <- NA
   pheno_train$YLD[pheno_train$GID %in% gid.pred] <- NA
   ## output accessions and trials used for training
-  trialsTrain <- data.frame(studyName=unique(pheno_sub$ENV))
+  trialsTrain <- data.frame(studyName=unique(pheno_sub$study_name))
   germplasmTrain <- data.frame(germplasmName=unique(pheno_sub$GID))
   
   p2f.tri <- here("submission",tri,"CV00_Trials.csv")
@@ -1370,7 +1370,7 @@ for(tri in target_trials){
   h<-1
   K<-exp(-h*D)
   Kg <- Zg %*% K %*% t(Zg)
-  
+
   fit <- BGLR::BGLR(y=pheno_train$YLD,
                     ETA=list(
                       env=list(~factor(LOC)+factor(YEAR), data=pheno_train, model="BRR"),
@@ -1378,12 +1378,12 @@ for(tri in target_trials){
                       g=list(K=Kg, model="RKHS")),
                     nIter=10000, burnIn=2000,
                     saveAt =here("output","temp",paste0("RKHS_loc-env_CV00_tri-",tri,"_final_")))
-  
+
   ## export predicted values
-  pred.all <- data.frame(ENV=pheno_train$ENV, 
-                         GID=pheno_train$GID, pred=c(fit$yHat)) |> 
-    filter(ENV %in% env.pred$ENV) 
-  pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID, 
+  pred.all <- data.frame(ENV=pheno_train$ENV,
+                         GID=pheno_train$GID, pred=c(fit$yHat)) |>
+    filter(ENV %in% env.pred$ENV)
+  pred.sub <- pred.all |> select(-ENV) |> rename(germplasmName=GID,
                                                  prediction=pred)
   # p2d <- here("submission", tri)
   # dir.create(p2d)
